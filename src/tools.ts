@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
@@ -380,7 +381,16 @@ function fsFrom(ctx: Context): FileSystemLike {
 }
 
 function rootPath(config: GeoConfig, requested?: string): string {
-  return requested?.trim() || config.defaultRoot
+  const value = requested?.trim() || config.defaultRoot
+  if (!config.defaultRoot || isAbsolute(value)) return value
+  return resolvePath(config.defaultRoot, value)
+}
+
+/** Resolve workspace-relative tool paths against the configured knowledge-base root. */
+export function resolveScopedPath(config: GeoConfig, requested: string): string {
+  const value = requested.trim()
+  if (!config.defaultRoot || isAbsolute(value)) return value
+  return resolvePath(config.defaultRoot, value)
 }
 
 function focusAudit(note: Parameters<typeof auditNote>[0], focus?: AuditFocus): ReturnType<typeof auditNote> & { focus: AuditFocus } {
@@ -398,11 +408,13 @@ function focusAudit(note: Parameters<typeof auditNote>[0], focus?: AuditFocus): 
   }
 }
 
-async function ensureInsideRoot(fs: FileSystemLike, config: GeoConfig, targetPath: string, signal?: AbortSignal): Promise<void> {
-  if (!config.defaultRoot) return
+async function ensureInsideRoot(fs: FileSystemLike, config: GeoConfig, targetPath: string, signal?: AbortSignal): Promise<string> {
+  const scopedTarget = resolveScopedPath(config, targetPath)
+  if (!config.defaultRoot) return scopedTarget
   const root = await fs.resolve(config.defaultRoot, { signal })
-  const target = await fs.resolve(targetPath, { signal })
+  const target = await fs.resolve(scopedTarget, { signal })
   if (!fs.contains(root, target)) throw new Error(`Path is outside configured defaultRoot: ${targetPath}`)
+  return scopedTarget
 }
 
 export function registerGeoTools(ctx: Context, config: GeoConfig): void {
@@ -417,7 +429,9 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   }
 
   const presentationMeta = (_args: unknown, value: unknown) => {
-    if (!value || typeof value !== 'object' || !('previewToken' in value)) return {}
+    if (!value || typeof value !== 'object' || !('previewToken' in value)) {
+      return { path: '', oldText: null, newText: '', truncated: false }
+    }
     const token = value.previewToken
     const preview = typeof token === 'string' ? previews.get(token) : undefined
     const maxDiffChars = 20_000
@@ -536,8 +550,8 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       render: (_args, value) => renderValue(value, config.maxResultChars),
     },
     async execute(args, exec) {
-      await ensureInsideRoot(fs, config, args.path, exec.signal)
-      const note = await readNote(fs, args.path, config, exec.signal)
+      const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
+      const note = await readNote(fs, path, config, exec.signal)
       return focusAudit(note, args.focus)
     },
   }))
@@ -573,8 +587,8 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       render: (_args, value) => renderValue(value, config.maxResultChars),
     },
     async execute(args, exec) {
-      await ensureInsideRoot(fs, config, args.path, exec.signal)
-      const note = await readNote(fs, args.path, config, exec.signal)
+      const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
+      const note = await readNote(fs, path, config, exec.signal)
       return createContentBrief(note, auditNote(note))
     },
   }))
@@ -590,8 +604,8 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       render: (_args, value) => renderValue(value, config.maxResultChars),
     },
     async execute(args, exec) {
-      await ensureInsideRoot(fs, config, args.path, exec.signal)
-      const note = await readNote(fs, args.path, config, exec.signal)
+      const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
+      const note = await readNote(fs, path, config, exec.signal)
       const sourceFields = Object.entries(note.frontmatter)
         .filter(([key]) => /source|citation|reference|url/i.test(key))
         .map(([key, value]) => ({
@@ -643,8 +657,8 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       return diffView(args.path, args.content, `Preview ready: ${args.path}`, diffOldText(result.meta))
     },
     async execute(args, exec) {
-      await ensureInsideRoot(fs, config, args.path, exec.signal)
-      const target = await fs.resolve(args.path, { signal: exec.signal })
+      const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
+      const target = await fs.resolve(path, { signal: exec.signal })
       const info = await fs.stat(target, exec.signal)
       if (!info || info.type !== 'file') throw new Error(`File not found: ${args.path}`)
       if (args.content.length > config.maxTextChars) throw new Error(`Replacement exceeds maxTextChars (${config.maxTextChars})`)
@@ -654,10 +668,10 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       const newHash = contentHash(args.content)
       const expiresAt = Date.now() + 10 * 60 * 1000
       prunePreviews()
-      previews.set(token, { path: args.path, content: args.content, oldContent: current, version: info.version, oldHash, newHash, expiresAt, used: false })
+      previews.set(token, { path, content: args.content, oldContent: current, version: info.version, oldHash, newHash, expiresAt, used: false })
       return {
         status: 'preview-only' as const,
-        path: args.path,
+        path,
         previewToken: token,
         oldHash,
         newHash,
@@ -690,12 +704,12 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       return diffView(args.path, args.content, `Applied changes: ${args.path}`, diffOldText(result.meta))
     },
     async execute(args, exec) {
-      await ensureInsideRoot(fs, config, args.path, exec.signal)
+      const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
       prunePreviews()
       const preview = previews.get(args.previewToken)
-      if (!preview || preview.path !== args.path || preview.used) throw new Error('Preview token is missing, expired, already used, or belongs to another path.')
+      if (!preview || preview.path !== path || preview.used) throw new Error('Preview token is missing, expired, already used, or belongs to another path.')
       if (preview.content !== args.content) throw new Error('Content does not match the preview token.')
-      const target = await fs.resolve(args.path, { signal: exec.signal })
+      const target = await fs.resolve(path, { signal: exec.signal })
       const info = await fs.stat(target, exec.signal)
       if (!info || info.type !== 'file') throw new Error(`File not found: ${args.path}`)
       const current = await fs.readText(target, exec.signal)
@@ -706,7 +720,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       preview.used = true
       return {
         status: 'applied' as const,
-        path: args.path,
+        path,
         previewToken: args.previewToken,
         oldHash: preview.oldHash,
         newHash: preview.newHash,

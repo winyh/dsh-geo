@@ -128,6 +128,8 @@ maxTextChars: 180000
 maxResultChars: 50000
 ```
 
+Tool paths may be absolute or workspace-relative. Relative paths resolve under `defaultRoot`, and every read or write is checked against that boundary.
+
 ## Example prompts
 
 ```text

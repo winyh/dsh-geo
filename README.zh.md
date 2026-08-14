@@ -133,6 +133,8 @@ dsh plugin --profile default add ./dsh-geo
 
 默认知识库目录：由安装者自行配置。
 
+工具路径支持绝对路径或工作区相对路径。相对路径会基于 `defaultRoot` 解析，所有读写都会经过根目录边界校验。
+
 ## 开发
 
 ```bash
