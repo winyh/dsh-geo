@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/cosmokit@1.8.2'
+  - '@deepseek-ai/schemastery@3.18.1'
+autoInstallPeers: false
+strictPeerDependencies: false
