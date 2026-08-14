@@ -332,6 +332,20 @@ function projectReport(result: VaultAuditResult): string {
   const priority = result.priorityFiles.length > 0
     ? result.priorityFiles.map((file, index) => String(index + 1) + ". " + file.path + " - " + file.audit.scores.overall + "/100").join('\n')
     : '- No Markdown files were found.'
+  const nextSteps = [
+    result.priorityFiles.length > 0
+      ? `Start with ${result.priorityFiles[0].path}: run geo_audit_note, then preview one focused content change.`
+      : '',
+    summary.missingSources > 0
+      ? `Run geo_source_check on the ${summary.missingSources} note(s) without source URLs and add provenance before rewriting copy.`
+      : '',
+    summary.brokenLinks > 0 || summary.ambiguousLinks > 0
+      ? `Repair ${summary.brokenLinks} broken and ${summary.ambiguousLinks} ambiguous internal link(s) before relying on the vault as a knowledge graph.`
+      : '',
+    summary.staleNotes > 0
+      ? `Review the ${summary.staleNotes} stale note(s) and verify their claims before publishing new answers.`
+      : '',
+  ].filter(Boolean)
   return [
     '# 生成式引擎优化项目报告 / Generative Engine Optimization Report',
     '',
@@ -362,6 +376,10 @@ function projectReport(result: VaultAuditResult): string {
     '',
     priority,
     '',
+    '## Next steps',
+    '',
+    nextSteps.length > 0 ? nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n') : '1. Run geo_audit_note on the note that matters most to the current user or business goal.',
+    '',
     result.errors.length > 0 ? '## Scan warnings\n\n' + result.errors.map((error) => `- ${error}`).join('\n') : '',
   ].filter(Boolean).join('\n')
 }
@@ -380,8 +398,9 @@ function fsFrom(ctx: Context): FileSystemLike {
   return (ctx as unknown as { fs: FileSystemLike }).fs
 }
 
-function rootPath(config: GeoConfig, requested?: string): string {
-  const value = requested?.trim() || config.defaultRoot
+export function resolveRootPath(config: Pick<GeoConfig, 'defaultRoot'>, requested?: string): string {
+  const value = requested?.trim()
+  if (!value) return config.defaultRoot ? resolvePath(config.defaultRoot) : resolvePath('.')
   if (!config.defaultRoot || isAbsolute(value)) return value
   return resolvePath(config.defaultRoot, value)
 }
@@ -391,6 +410,15 @@ export function resolveScopedPath(config: GeoConfig, requested: string): string 
   const value = requested.trim()
   if (!config.defaultRoot || isAbsolute(value)) return value
   return resolvePath(config.defaultRoot, value)
+}
+
+/** Use the preview-bound content when the caller omits the duplicate payload. */
+export function resolvePreviewContent(previewContent: string | undefined, requestedContent?: string): string {
+  if (previewContent === undefined) throw new Error('Preview content is unavailable; generate a new preview before applying changes.')
+  if (requestedContent !== undefined && requestedContent !== previewContent) {
+    throw new Error('Content does not match the preview token.')
+  }
+  return previewContent
 }
 
 function focusAudit(note: Parameters<typeof auditNote>[0], focus?: AuditFocus): ReturnType<typeof auditNote> & { focus: AuditFocus } {
@@ -464,7 +492,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       render: (_args, value) => renderValue(value, config.maxResultChars),
     },
     async execute(args, exec) {
-      const root = rootPath(config, args.root)
+      const root = resolveRootPath(config, args.root)
       const checks: Array<{ id: string; status: 'pass' | 'warn' | 'fail'; message: string }> = []
       try {
         await ensureInsideRoot(fs, config, root, exec.signal)
@@ -526,7 +554,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       render: (_args, value) => renderValue(value, config.maxResultChars),
     },
     async execute(args, exec) {
-      const root = rootPath(config, args.root)
+      const root = resolveRootPath(config, args.root)
       await ensureInsideRoot(fs, config, root, exec.signal)
       const limits = { ...config, maxFiles: Math.min(config.maxFiles, Math.max(1, args.maxFiles || config.maxFiles)) }
       const scan = await scanVault(fs, root, limits, exec.signal)
@@ -568,7 +596,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       render: (_args, value) => renderValue(value, config.maxResultChars),
     },
     async execute(args, exec) {
-      const root = rootPath(config, args.root)
+      const root = resolveRootPath(config, args.root)
       await ensureInsideRoot(fs, config, root, exec.signal)
       const limits = { ...config, maxFiles: Math.min(config.maxFiles, Math.max(1, args.maxFiles || config.maxFiles)) }
       const scan = await scanVault(fs, root, limits, exec.signal)
@@ -685,10 +713,10 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
 
   ctx.tools.register(defineTool({
     name: 'geo_apply_content',
-    description: 'Apply a previously previewed Markdown replacement after explicit approval. Requires a valid preview token and refuses stale files.',
+    description: 'Apply a previously previewed Markdown replacement after explicit approval. Requires a valid preview token, can reuse its bound content when content is omitted, and refuses stale files.',
     parameters: {
       path: { type: 'string', required: true, description: 'Markdown file to update.' },
-      content: { type: 'string', required: true, description: 'The exact content returned for the preview.' },
+      content: { type: 'string', description: 'Optional exact content returned for the preview. Omit it to reuse the content bound to previewToken.' },
       previewToken: { type: 'string', required: true, description: 'Short-lived token returned by geo_preview_content.' },
     },
     output: {
@@ -697,18 +725,22 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       presentationMeta,
     },
     presentCall(args) {
-      return diffView(args.path, args.content, `Apply changes: ${args.path}`, previews.get(args.previewToken)?.oldContent.slice(0, 20_000) || null)
+      const preview = previews.get(args.previewToken)
+      const content = typeof args.content === 'string' ? args.content : preview?.content || ''
+      return diffView(args.path, content, `Apply changes: ${args.path}`, preview?.oldContent.slice(0, 20_000) || null)
     },
     presentResult(args, result) {
       if (result.isError) return { card: 'generic', title: `Apply blocked: ${args.path}`, content: result.content }
-      return diffView(args.path, args.content, `Applied changes: ${args.path}`, diffOldText(result.meta))
+      const preview = previews.get(args.previewToken)
+      const content = typeof args.content === 'string' ? args.content : preview?.content || ''
+      return diffView(args.path, content, `Applied changes: ${args.path}`, diffOldText(result.meta))
     },
     async execute(args, exec) {
       const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
       prunePreviews()
       const preview = previews.get(args.previewToken)
       if (!preview || preview.path !== path || preview.used) throw new Error('Preview token is missing, expired, already used, or belongs to another path.')
-      if (preview.content !== args.content) throw new Error('Content does not match the preview token.')
+      const content = resolvePreviewContent(preview.content, args.content)
       const target = await fs.resolve(path, { signal: exec.signal })
       const info = await fs.stat(target, exec.signal)
       if (!info || info.type !== 'file') throw new Error(`File not found: ${args.path}`)
@@ -716,7 +748,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       if (contentHash(current) !== preview.oldHash || versionKey(info.version) !== versionKey(preview.version)) {
         throw new Error('File changed after preview; generate a new preview before applying changes.')
       }
-      await fs.writeText(target, args.content, { kind: 'replaceIfVersion', version: preview.version }, exec.signal)
+      await fs.writeText(target, content, { kind: 'replaceIfVersion', version: preview.version }, exec.signal)
       preview.used = true
       return {
         status: 'applied' as const,

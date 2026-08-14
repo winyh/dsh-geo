@@ -112,16 +112,19 @@ function stale(updated: string | undefined): boolean {
 export function summarizeVault(root: string, scan: VaultScan): VaultAuditResult {
   const records: VaultFileRecord[] = scan.files.map((file) => {
     const audit = auditNote(file)
+    const status = typeof file.frontmatter.status === 'string' ? file.frontmatter.status : undefined
+    const type = typeof file.frontmatter.type === 'string' ? file.frontmatter.type : undefined
+    const updated = typeof file.frontmatter.updated === 'string' ? file.frontmatter.updated : undefined
     return {
       path: file.path,
       title: file.title,
       wordCount: file.wordCount,
-      status: typeof file.frontmatter.status === 'string' ? file.frontmatter.status : undefined,
-      type: typeof file.frontmatter.type === 'string' ? file.frontmatter.type : undefined,
-      updated: typeof file.frontmatter.updated === 'string' ? file.frontmatter.updated : undefined,
       internalLinks: file.internalLinks,
       sourceUrls: file.sourceUrls,
       audit,
+      ...(status === undefined ? {} : { status }),
+      ...(type === undefined ? {} : { type }),
+      ...(updated === undefined ? {} : { updated }),
     }
   })
   const pathByLink = new Map<string, string[]>()

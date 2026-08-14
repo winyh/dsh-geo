@@ -114,7 +114,21 @@ Use `focus=seo`, `focus=geo` or `focus=aeo` when you only want one assessment pi
 
 ### 3. Preview before writing
 
-Content changes are preview-only by default. Ask for a preview first, review the complete replacement, then explicitly confirm before applying it. The write operation uses a version guard and refuses to overwrite a file changed after the preview.
+Content changes are preview-only by default. A reliable first-use loop is:
+
+1. Ask for an audit of one note and select one or two high-impact findings.
+2. Ask the agent to rewrite only that note while preserving factual claims, sources and useful local links.
+3. Ask for a preview and review the diff, not just the score.
+4. Explicitly confirm the preview. Harness asks for approval again before the write.
+5. Apply the preview. The agent can use `path` + `previewToken`; repeating the full Markdown `content` is optional because the token already binds the exact preview.
+
+The write operation uses a version guard and refuses to overwrite a file changed after the preview. If that happens, audit the current file and create a new preview instead of forcing the old change through.
+
+For a practical first request, use:
+
+```text
+Check the configured root, audit notes/launch.md, fix only the three highest-impact issues, show a diff, and wait for my approval before writing anything.
+```
 
 ## Configure
 

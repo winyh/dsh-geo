@@ -18,5 +18,8 @@ describe('summarizeVault', () => {
     expect(result.summary.brokenLinks).toBe(1)
     expect(result.summary.ambiguousLinks).toBe(1)
     expect(result.summary.orphanNotes).toBeGreaterThan(0)
+    expect('status' in result.priorityFiles[0]).toBe(false)
+    expect('type' in result.priorityFiles[0]).toBe(false)
+    expect('updated' in result.priorityFiles[0]).toBe(false)
   })
 })
