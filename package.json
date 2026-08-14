@@ -49,6 +49,10 @@
     "knowledge-management"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/winyh/dsh-geo.git"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1-rc.1",
     "@deepseek-ai/dsh-fs": "^0.0.1-rc.1",
