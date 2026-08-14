@@ -289,10 +289,12 @@ const reportOutputSchema = {
 interface ContentPreview {
   path: string
   content: string
+  oldContent: string
   version: unknown
   oldHash: string
   newHash: string
   expiresAt: number
+  used: boolean
 }
 
 function renderValue(value: unknown, maxChars: number) {
@@ -309,13 +311,19 @@ function versionKey(version: unknown): string {
   return JSON.stringify(version) ?? String(version)
 }
 
-function diffView(path: string, content: string, title: string) {
+function diffView(path: string, content: string, title: string, oldText: string | null = null) {
   return {
     card: 'diff' as const,
     title,
-    diffs: [{ path, oldText: null, newText: content }],
+    diffs: [{ path, oldText, newText: content }],
     locations: [{ path }],
   }
+}
+
+function diffOldText(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object' || !('oldText' in meta)) return null
+  const value = meta.oldText
+  return typeof value === 'string' ? value : null
 }
 
 function projectReport(result: VaultAuditResult): string {
@@ -405,6 +413,19 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     const now = Date.now()
     for (const [token, preview] of previews) {
       if (preview.expiresAt <= now) previews.delete(token)
+    }
+  }
+
+  const presentationMeta = (_args: unknown, value: unknown) => {
+    if (!value || typeof value !== 'object' || !('previewToken' in value)) return {}
+    const token = value.previewToken
+    const preview = typeof token === 'string' ? previews.get(token) : undefined
+    const maxDiffChars = 20_000
+    return {
+      path: preview?.path || '',
+      oldText: preview ? preview.oldContent.slice(0, maxDiffChars) : null,
+      newText: preview ? preview.content.slice(0, maxDiffChars) : '',
+      truncated: preview ? preview.oldContent.length > maxDiffChars || preview.content.length > maxDiffChars : false,
     }
   }
 
@@ -612,13 +633,14 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     output: {
       schema: previewOutputSchema,
       render: (_args, value) => renderValue(value, config.maxResultChars),
+      presentationMeta,
     },
     presentCall(args) {
       return diffView(args.path, args.content, `Preview changes: ${args.path}`)
     },
     presentResult(args, result) {
       if (result.isError) return { card: 'generic', title: `Preview failed: ${args.path}`, content: result.content }
-      return diffView(args.path, args.content, `Preview ready: ${args.path}`)
+      return diffView(args.path, args.content, `Preview ready: ${args.path}`, diffOldText(result.meta))
     },
     async execute(args, exec) {
       await ensureInsideRoot(fs, config, args.path, exec.signal)
@@ -632,7 +654,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       const newHash = contentHash(args.content)
       const expiresAt = Date.now() + 10 * 60 * 1000
       prunePreviews()
-      previews.set(token, { path: args.path, content: args.content, version: info.version, oldHash, newHash, expiresAt })
+      previews.set(token, { path: args.path, content: args.content, oldContent: current, version: info.version, oldHash, newHash, expiresAt, used: false })
       return {
         status: 'preview-only' as const,
         path: args.path,
@@ -658,19 +680,20 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     output: {
       schema: applyOutputSchema,
       render: (_args, value) => renderValue(value, config.maxResultChars),
+      presentationMeta,
     },
     presentCall(args) {
-      return diffView(args.path, args.content, `Apply changes: ${args.path}`)
+      return diffView(args.path, args.content, `Apply changes: ${args.path}`, previews.get(args.previewToken)?.oldContent.slice(0, 20_000) || null)
     },
     presentResult(args, result) {
       if (result.isError) return { card: 'generic', title: `Apply blocked: ${args.path}`, content: result.content }
-      return diffView(args.path, args.content, `Applied changes: ${args.path}`)
+      return diffView(args.path, args.content, `Applied changes: ${args.path}`, diffOldText(result.meta))
     },
     async execute(args, exec) {
       await ensureInsideRoot(fs, config, args.path, exec.signal)
       prunePreviews()
       const preview = previews.get(args.previewToken)
-      if (!preview || preview.path !== args.path) throw new Error('Preview token is missing, expired, or belongs to another path.')
+      if (!preview || preview.path !== args.path || preview.used) throw new Error('Preview token is missing, expired, already used, or belongs to another path.')
       if (preview.content !== args.content) throw new Error('Content does not match the preview token.')
       const target = await fs.resolve(args.path, { signal: exec.signal })
       const info = await fs.stat(target, exec.signal)
@@ -680,7 +703,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         throw new Error('File changed after preview; generate a new preview before applying changes.')
       }
       await fs.writeText(target, args.content, { kind: 'replaceIfVersion', version: preview.version }, exec.signal)
-      previews.delete(args.previewToken)
+      preview.used = true
       return {
         status: 'applied' as const,
         path: args.path,
