@@ -35,6 +35,8 @@
     "lint": "eslint src tests --max-warnings 0"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-web": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-fetch-http": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "publishConfig": {
@@ -61,11 +63,11 @@
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-attachment": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-brand": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-code-runtime": "^0.1.0-rc.6",
-    "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-fs": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-invariants": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",

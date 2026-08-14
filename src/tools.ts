@@ -3,10 +3,13 @@ import { isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
+import type {} from '@deepseek-ai/dsh-web'
 import { createContentBrief, auditNote } from './audit.js'
 import { readNote } from './vault.js'
 import { scanVault, summarizeVault } from './vault.js'
-import type { FileSystemLike, GeoConfig, Pillar, VaultAuditResult } from './types.js'
+import { fetchPublicDocument, isPublicUrl, readLocalDocument, type SourceDocument } from './web.js'
+import { buildKeywordPlan, buildProductionPlan } from './workflow.js'
+import type { ContentBrief, FileSystemLike, GeoConfig, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
 
 type AuditFocus = Pillar | 'all'
 
@@ -223,6 +226,7 @@ const previewOutputSchema = {
     status: { type: 'string', enum: ['preview-only', 'applied'], required: true },
     path: { type: 'string', required: true },
     previewToken: { type: 'string', required: true },
+    created: { type: 'boolean', required: true },
     oldHash: { type: 'string', required: true },
     newHash: { type: 'string', required: true },
     expiresAt: { type: 'string', required: true },
@@ -239,6 +243,7 @@ const applyOutputSchema = {
     status: { type: 'string', enum: ['applied'], required: true },
     path: { type: 'string', required: true },
     previewToken: { type: 'string', required: true },
+    created: { type: 'boolean', required: true },
     oldHash: { type: 'string', required: true },
     newHash: { type: 'string', required: true },
     changed: { type: 'boolean', required: true },
@@ -287,11 +292,131 @@ const reportOutputSchema = {
   },
 } as const
 
+const keywordPlanSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    status: { type: 'string', enum: ['ready', 'partial', 'seeds-only'], required: true },
+    dataQuality: { type: 'string', enum: ['qualitative', 'seed-only'], required: true },
+    volumeDataAvailable: { type: 'boolean', required: true },
+    primaryKeyword: { type: 'string', required: true },
+    candidates: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          term: { type: 'string', required: true },
+          role: { type: 'string', enum: ['primary', 'secondary', 'question', 'entity'], required: true },
+          intent: { type: 'string', enum: ['informational', 'commercial', 'navigational', 'transactional', 'unknown'], required: true },
+          evidence: { type: 'array', items: { type: 'string' }, required: true },
+        },
+      },
+      required: true,
+    },
+    searchSignals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string', required: true },
+          sourceUrls: { type: 'array', items: { type: 'string' }, required: true },
+          observedTitles: { type: 'array', items: { type: 'string' }, required: true },
+        },
+      },
+      required: true,
+    },
+    adjustments: { type: 'array', items: { type: 'string' }, required: true },
+    unknownReasons: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
+const productionPlanSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    stages: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', enum: ['diagnose', 'keyword-map', 'draft', 'verify'], required: true },
+          objective: { type: 'string', required: true },
+          actions: { type: 'array', items: { type: 'string' }, required: true },
+          deliverable: { type: 'string', required: true },
+        },
+      },
+      required: true,
+    },
+    draftContract: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        requiredSections: { type: 'array', items: { type: 'string' }, required: true },
+        evidenceRules: { type: 'array', items: { type: 'string' }, required: true },
+        outputFormat: { type: 'string', required: true },
+      },
+      required: true,
+    },
+    writebackInstructions: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
+const workflowOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    source: { type: 'string', required: true },
+    sourceType: { type: 'string', enum: ['public-url', 'local-markdown', 'private-snapshot'], required: true },
+    status: { type: 'string', enum: ['ready', 'partial'], required: true },
+    access: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        mode: { type: 'string', enum: ['public-url', 'local-file'], required: true },
+        credentialsUsed: { type: 'boolean', required: true },
+        limitation: { type: 'string', required: true },
+      },
+      required: true,
+    },
+    capture: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        finalUrl: { type: 'string', required: true },
+        statusCode: { type: 'number', required: true },
+        bodyKind: { type: 'string', enum: ['html', 'text', 'markdown', 'snapshot'], required: true },
+        capturedAt: { type: 'string', required: true },
+        truncated: { type: 'boolean', required: true },
+        note: { type: 'string', required: true },
+      },
+      required: true,
+    },
+    audit: auditOutputSchema,
+    keywordPlan: keywordPlanSchema,
+    contentBrief: briefOutputSchema,
+    productionPlan: productionPlanSchema,
+    writeback: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        canPreviewExistingFile: { type: 'boolean', required: true },
+        canCreateNewFile: { type: 'boolean', required: true },
+        instructions: { type: 'array', items: { type: 'string' }, required: true },
+      },
+      required: true,
+    },
+  },
+} as const
+
 interface ContentPreview {
   path: string
   content: string
   oldContent: string
   version: unknown
+  created: boolean
   oldHash: string
   newHash: string
   expiresAt: number
@@ -396,6 +521,26 @@ function freshnessOf(updated: string): { status: 'fresh' | 'stale' | 'unknown'; 
 
 function fsFrom(ctx: Context): FileSystemLike {
   return (ctx as unknown as { fs: FileSystemLike }).fs
+}
+
+function applyWorkflowContext(
+  document: SourceDocument,
+  brief: ContentBrief,
+  goal?: string,
+  audience?: string,
+): ContentBrief {
+  const contextNote = goal ? [`Business goal: ${goal}`] : []
+  return {
+    ...brief,
+    source: document.source,
+    intent: goal || brief.intent,
+    audience: audience || brief.audience,
+    nextActions: [...contextNote, ...brief.nextActions],
+  }
+}
+
+function workflowStatus(document: SourceDocument, keywordPlan: KeywordPlan): 'ready' | 'partial' {
+  return document.truncated || keywordPlan.status !== 'ready' ? 'partial' : 'ready'
 }
 
 export function resolveRootPath(config: Pick<GeoConfig, 'defaultRoot'>, requested?: string): string {
@@ -543,6 +688,78 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'geo_workflow',
+    description: 'Run the complete SEO/GEO/AEO workflow from one public URL or one local Markdown/HTML snapshot: diagnose, build a qualitative keyword plan, create a content-production brief, and return safe write-back instructions. Reads only.',
+    parameters: {
+      source: { type: 'string', required: true, description: 'Public http(s) URL, local Markdown path, or local HTML export/snapshot from a public or private account page.' },
+      goal: { type: 'string', description: 'Optional business or user goal, such as leads, product education, documentation discovery or support deflection.' },
+      audience: { type: 'string', description: 'Optional target audience to use in the production brief.' },
+      seedKeywords: { type: 'array', items: { type: 'string' }, description: 'Optional terms supplied by the user; the first term becomes the primary query.' },
+    },
+    output: {
+      schema: workflowOutputSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const source = args.source.trim()
+      if (!source) throw new Error('source is required: pass a public URL or a local Markdown/HTML snapshot path.')
+      let document: SourceDocument
+      if (isPublicUrl(source)) {
+        document = await fetchPublicDocument(ctx.web, source, config, exec.signal)
+      } else {
+        const path = await ensureInsideRoot(fs, config, source, exec.signal)
+        if (!/\.(?:md|mdown|html?)$/i.test(path)) {
+          throw new Error('Local workflow sources must be .md, .mdown, .html or .htm. Export a private/public account page to Markdown or HTML first.')
+        }
+        document = await readLocalDocument(fs, path, config, exec.signal)
+      }
+      const audit = focusAudit(document.note, 'all')
+      // Never send terms extracted from a local Markdown/HTML file to public
+      // search. This keeps private snapshots and local knowledge bases local.
+      const keywordPlan = await buildKeywordPlan(document.note, audit, isPublicUrl(source) ? ctx.web : undefined, args.seedKeywords || [], exec.signal)
+      const contentBrief = applyWorkflowContext(
+        document,
+        createContentBrief(document.note, audit),
+        args.goal,
+        args.audience,
+      )
+      const productionPlan = buildProductionPlan(contentBrief, audit, keywordPlan)
+      const localFile = document.sourceType !== 'public-url'
+      return {
+        source,
+        sourceType: document.sourceType,
+        status: workflowStatus(document, keywordPlan),
+        access: {
+          mode: isPublicUrl(source) ? 'public-url' as const : 'local-file' as const,
+          credentialsUsed: false,
+          limitation: isPublicUrl(source)
+            ? 'Anonymous public retrieval only. JavaScript-rendered or logged-in pages should be exported as Markdown/HTML and passed as a local snapshot.'
+            : document.accessNote,
+        },
+        capture: {
+          finalUrl: document.finalUrl,
+          statusCode: document.statusCode,
+          bodyKind: document.bodyKind,
+          capturedAt: document.capturedAt,
+          truncated: document.truncated,
+          note: document.accessNote,
+        },
+        audit,
+        keywordPlan,
+        contentBrief,
+        productionPlan,
+        writeback: {
+          canPreviewExistingFile: localFile,
+          canCreateNewFile: true,
+          instructions: localFile
+            ? ['Generate the complete Markdown draft from productionPlan, then preview it against the local source path.', 'For a new destination, call geo_preview_content with createIfMissing=true; all destinations remain inside defaultRoot.', 'Apply only after reviewing the diff; geo_apply_content uses a short-lived token and a version guard.']
+            : ['The URL itself is read-only. Generate the draft, save/export it to a local Markdown destination, then preview that destination with geo_preview_content.', 'For a private page, keep the exported HTML/Markdown inside defaultRoot; no cookies or credentials are passed to dsh-geo.', 'Apply only after reviewing the diff; geo_apply_content uses a short-lived token and a version guard.'],
+        },
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'geo_project_report',
     description: 'Create a structured, shareable project report for the Markdown knowledge base. Reads only.',
     parameters: {
@@ -671,6 +888,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     parameters: {
       path: { type: 'string', required: true, description: 'Markdown file to update.' },
       content: { type: 'string', required: true, description: 'Complete replacement Markdown content.' },
+      createIfMissing: { type: 'boolean', description: 'Set true to preview creating a new Markdown file. Defaults to false.' },
     },
     output: {
       schema: previewOutputSchema,
@@ -688,19 +906,22 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       const path = await ensureInsideRoot(fs, config, args.path, exec.signal)
       const target = await fs.resolve(path, { signal: exec.signal })
       const info = await fs.stat(target, exec.signal)
-      if (!info || info.type !== 'file') throw new Error(`File not found: ${args.path}`)
+      if (info && info.type !== 'file') throw new Error(`Target is not a file: ${args.path}`)
+      if (!info && !args.createIfMissing) throw new Error(`File not found: ${args.path}. Set createIfMissing=true to preview a new Markdown file.`)
+      if (!/\.(?:md|mdown)$/i.test(path)) throw new Error('Only .md and .mdown destinations can be previewed.')
       if (args.content.length > config.maxTextChars) throw new Error(`Replacement exceeds maxTextChars (${config.maxTextChars})`)
-      const current = await fs.readText(target, exec.signal)
+      const current = info ? await fs.readText(target, exec.signal) : ''
       const token = randomBytes(18).toString('hex')
       const oldHash = contentHash(current)
       const newHash = contentHash(args.content)
       const expiresAt = Date.now() + 10 * 60 * 1000
       prunePreviews()
-      previews.set(token, { path, content: args.content, oldContent: current, version: info.version, oldHash, newHash, expiresAt, used: false })
+      previews.set(token, { path, content: args.content, oldContent: current, version: info?.version, created: !info, oldHash, newHash, expiresAt, used: false })
       return {
         status: 'preview-only' as const,
         path,
         previewToken: token,
+        created: !info,
         oldHash,
         newHash,
         expiresAt: new Date(expiresAt).toISOString(),
@@ -743,17 +964,23 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       const content = resolvePreviewContent(preview.content, args.content)
       const target = await fs.resolve(path, { signal: exec.signal })
       const info = await fs.stat(target, exec.signal)
-      if (!info || info.type !== 'file') throw new Error(`File not found: ${args.path}`)
-      const current = await fs.readText(target, exec.signal)
-      if (contentHash(current) !== preview.oldHash || versionKey(info.version) !== versionKey(preview.version)) {
-        throw new Error('File changed after preview; generate a new preview before applying changes.')
+      if (preview.created) {
+        if (info) throw new Error('The destination appeared after preview; generate a new preview before creating it.')
+        await fs.writeText(target, content, { kind: 'createIfAbsent' }, exec.signal)
+      } else {
+        if (!info || info.type !== 'file') throw new Error(`File not found: ${args.path}`)
+        const current = await fs.readText(target, exec.signal)
+        if (contentHash(current) !== preview.oldHash || versionKey(info.version) !== versionKey(preview.version)) {
+          throw new Error('File changed after preview; generate a new preview before applying changes.')
+        }
+        await fs.writeText(target, content, { kind: 'replaceIfVersion', version: preview.version }, exec.signal)
       }
-      await fs.writeText(target, content, { kind: 'replaceIfVersion', version: preview.version }, exec.signal)
       preview.used = true
       return {
         status: 'applied' as const,
         path,
         previewToken: args.previewToken,
+        created: preview.created,
         oldHash: preview.oldHash,
         newHash: preview.newHash,
         changed: true,

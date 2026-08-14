@@ -1,5 +1,11 @@
 export type Pillar = 'seo' | 'geo' | 'aeo'
 
+export type SourceType = 'public-url' | 'local-markdown' | 'private-snapshot'
+
+export type KeywordRole = 'primary' | 'secondary' | 'question' | 'entity'
+
+export type KeywordIntent = 'informational' | 'commercial' | 'navigational' | 'transactional' | 'unknown'
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export interface Frontmatter {
@@ -113,6 +119,47 @@ export interface ContentBrief {
   entities: string[]
   sourceGaps: string[]
   nextActions: string[]
+}
+
+export interface KeywordCandidate {
+  term: string
+  role: KeywordRole
+  intent: KeywordIntent
+  evidence: string[]
+}
+
+export interface KeywordSearchSignal {
+  query: string
+  sourceUrls: string[]
+  observedTitles: string[]
+}
+
+export interface KeywordPlan {
+  status: 'ready' | 'partial' | 'seeds-only'
+  dataQuality: 'qualitative' | 'seed-only'
+  volumeDataAvailable: boolean
+  primaryKeyword: string
+  candidates: KeywordCandidate[]
+  searchSignals: KeywordSearchSignal[]
+  adjustments: string[]
+  unknownReasons: string[]
+}
+
+export interface ProductionStage {
+  id: 'diagnose' | 'keyword-map' | 'draft' | 'verify'
+  objective: string
+  actions: string[]
+  deliverable: string
+}
+
+export interface ProductionPlan {
+  stages: ProductionStage[]
+  draftContract: {
+    requiredSections: string[]
+    evidenceRules: string[]
+    outputFormat: string
+  }
+  writebackInstructions: string[]
 }
 
 export interface ScanLimits {

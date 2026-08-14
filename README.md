@@ -12,10 +12,13 @@
 - Scan a vault for metadata gaps, missing sources, broken knowledge structure, orphan notes and duplicate titles.
 - Check the configured root before scanning and create a shareable project report.
 - Build a content brief with query, intent, audience, outline, questions and source gaps.
+- Run the complete workflow from a public website URL, public account URL, Markdown export or HTML snapshot.
+- Build a qualitative keyword plan from source signals, optional seed terms and Harness web search results; it never invents search volume.
+- Turn the diagnosis into a four-stage production plan: diagnose, map keywords, draft, and verify.
 - Check source provenance and freshness fields.
-- Preview or apply a complete Markdown replacement with a diff card, approval gate and stale-version guard.
+- Preview or apply a complete Markdown replacement, including safe creation of a new note inside `defaultRoot`.
 
-The plugin is local-first. It analyzes files through the Harness filesystem service and does not upload knowledge-base content.
+The plugin is local-first. Core analysis runs through the Harness filesystem service. Public URLs use the official anonymous `ctx.web` fetch seam; cookies and credentials are never used. Private or JavaScript-rendered pages should be exported as Markdown/HTML and analyzed as a local snapshot.
 
 ## User and business pain points
 
@@ -45,6 +48,7 @@ This plugin turns those needs into explainable, local-first checks with evidence
 | `geo_audit_note` | Audit one Markdown note |
 | `geo_audit_vault` | Scan a knowledge base |
 | `geo_project_report` | Create a structured project report |
+| `geo_workflow` | Run URL/snapshot diagnosis, keyword planning and content production planning |
 | `geo_content_brief` | Generate a structured content brief |
 | `geo_source_check` | Check citations and provenance |
 | `geo_preview_content` | Preview a complete Markdown replacement |
@@ -88,6 +92,28 @@ dsh plugin --profile default add ./dsh-geo
 
 ### 2. Ask with natural language
 
+The recommended entry point for a real SEO project is `geo_workflow`. It keeps diagnosis, keyword adjustment and content production in one result instead of making you guess which tool to call next.
+
+Analyze a public website or public account page:
+
+```text
+Run geo_workflow for https://example.com. Goal: increase qualified product education traffic. Audience: first-time evaluators. Return the SEO/GEO/AEO diagnosis, qualitative keyword plan and a complete Markdown production plan. Do not write files.
+```
+
+Analyze a public or private account page after export:
+
+```text
+Run geo_workflow for snapshots/account-home.html. Treat it as a private-page snapshot. Goal: make the profile easier to discover and quote. Return the diagnosis, keyword mapping, content brief and verification checklist. Do not write files.
+```
+
+The source boundary is deliberate:
+
+- Public `http(s)` URLs are fetched anonymously through Harness `ctx.web`.
+- Public pages that require JavaScript rendering should be saved/exported as Markdown or HTML first.
+- Private account pages are supported through a local Markdown/HTML snapshot; browser cookies and platform credentials do not enter the plugin.
+- Local Markdown/HTML inputs do not send extracted terms to public search; their keyword plan stays `seed-only` unless you explicitly provide external keyword data yourself.
+- Search results provide qualitative topic signals only. Search volume, ranking difficulty and traffic require a separate data source and are not fabricated by this plugin.
+
 Start with a readiness check when installing into a new environment:
 
 ```text
@@ -110,6 +136,10 @@ Create a project report with average SEO, GEO and AEO scores, governance gaps an
 Create a content brief from this note, including audience, intent, outline, questions and source gaps.
 ```
 
+```text
+Run the complete workflow for https://example.com, use "product education" as the seed keyword, and generate a draft plan without writing anything.
+```
+
 Use `focus=seo`, `focus=geo` or `focus=aeo` when you only want one assessment pillar.
 
 ### 3. Preview before writing
@@ -122,7 +152,7 @@ Content changes are preview-only by default. A reliable first-use loop is:
 4. Explicitly confirm the preview. Harness asks for approval again before the write.
 5. Apply the preview. The agent can use `path` + `previewToken`; repeating the full Markdown `content` is optional because the token already binds the exact preview.
 
-The write operation uses a version guard and refuses to overwrite a file changed after the preview. If that happens, audit the current file and create a new preview instead of forcing the old change through.
+The write operation uses a version guard and refuses to overwrite a file changed after the preview. If that happens, audit the current file and create a new preview instead of forcing the old change through. To save a draft as a new note, use `createIfMissing=true` on `geo_preview_content`; the destination must still be inside `defaultRoot`.
 
 For a practical first request, use:
 
@@ -167,7 +197,7 @@ pnpm test
 pnpm run build
 ```
 
-The plugin follows the DeepSeek Harness Cordis model: it exports `apply(ctx)`, injects `tools` and `fs`, and registers model-facing tools through the normal tool pipeline. Its core capabilities are self-contained and do not require an external GEO/SEO service.
+The plugin follows the DeepSeek Harness Cordis model: it exports `apply(ctx)`, injects `tools`, `fs` and `web`, and registers model-facing tools through the normal tool pipeline. Core scoring and file analysis are self-contained; public URL retrieval uses the official Harness web capability and does not require GEO-PRO.
 
 DeepSeek Harness is currently a developer preview, so the plugin pins the current release-candidate peer range and should be tested against the Harness version used for deployment.
 

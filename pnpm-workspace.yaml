@@ -19,5 +19,7 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-typert-protocol@0.1.0-rc.6'
   - '@deepseek-ai/dsh-user-approval@0.1.0-rc.6'
   - '@deepseek-ai/dsh-timeout@0.1.0-rc.6'
+  - '@deepseek-ai/dsh-web-fetch-http@0.1.0-rc.6'
+  - '@deepseek-ai/dsh-web@0.1.0-rc.6'
 autoInstallPeers: false
 strictPeerDependencies: false

@@ -10,11 +10,14 @@
 - 扫描知识库中的元数据缺失、来源缺失、孤立笔记和重复标题。
 - 在扫描前检查根目录是否可访问，并生成可交付的项目报告。
 - 生成内容 Brief：主题、关键词、意图、受众、大纲、用户问题和来源缺口。
+- 支持从公开网站 URL、公开账号主页 URL、Markdown 导出文件或 HTML 快照启动完整流程。
+- 根据来源信号、用户提供的种子词和 Harness 搜索结果生成定性关键词计划，不虚构搜索量。
+- 将诊断结果落成四阶段内容生产计划：诊断、关键词映射、写作、验证。
 - 检查引用来源、来源字段和更新时间。
-- 先显示 diff、再审批，使用版本保护安全写回 Markdown。
-- 核心分析完全在本地完成，不依赖外部 GEO/SEO 服务。
+- 先显示 diff，再使用版本保护安全写回 Markdown；也支持在根目录内安全创建新笔记。
+- 核心分析在本地完成，公开 URL 通过 Harness 官方 `ctx.web` 能力读取，不依赖 GEO-PRO。
 
-插件采用本地优先策略，不会上传知识库内容。
+插件采用本地优先策略，不会使用 Cookie 或账号凭据。私有账号主页和需要 JavaScript 渲染的页面，请先导出为 Markdown/HTML 快照，再放入 `defaultRoot` 内分析。
 
 ## 工具
 
@@ -24,6 +27,7 @@
 | `geo_audit_note` | 审计单个 Markdown 笔记 |
 | `geo_audit_vault` | 扫描整个知识库 |
 | `geo_project_report` | 生成结构化项目报告 |
+| `geo_workflow` | 从 URL/快照完成诊断、关键词规划和内容生产规划 |
 | `geo_content_brief` | 生成内容 Brief |
 | `geo_source_check` | 检查引用和来源可信度 |
 | `geo_preview_content` | 预览完整 Markdown 替换 |
@@ -87,6 +91,28 @@ dsh plugin --profile default add ./dsh-geo
 
 ### 2. 使用自然语言调用
 
+真实 SEO 项目建议优先使用 `geo_workflow`。它会在一次结果中完成诊断、关键词调整、内容 Brief 和生产验证计划，减少用户猜测工具调用顺序的成本。
+
+分析公开网站或公开账号主页：
+
+```text
+请对 https://example.com 执行 geo_workflow。目标：提升产品教育类的有效访问。受众：第一次评估产品的人。返回 SEO/GEO/AEO 诊断、定性关键词计划和完整 Markdown 内容生产计划，不要写入文件。
+```
+
+分析公开或私有账号主页的导出快照：
+
+```text
+请对 snapshots/account-home.html 执行 geo_workflow，把它当作私有主页快照。目标：让主页更容易被搜索和答案引擎发现、理解和引用。返回诊断、关键词映射、内容 Brief 和验证清单，不要写入文件。
+```
+
+入口边界如下：
+
+- 公开 `http(s)` URL 通过 Harness `ctx.web` 匿名读取。
+- 需要 JavaScript 渲染的公开页面，先保存/导出为 Markdown 或 HTML 再分析。
+- 私有账号主页通过本地 Markdown/HTML 快照支持；浏览器 Cookie 和平台凭据不会进入插件。
+- 本地 Markdown/HTML 默认不会把提取出的词发送到公开搜索；关键词计划会标为 `seed-only`，除非用户自行提供外部关键词数据。
+- 搜索结果只提供定性主题信号。搜索量、排名难度和流量需要独立数据源，插件不会自行编造。
+
 安装到新环境后，建议先检查根目录：
 
 ```text
@@ -109,6 +135,10 @@ dsh plugin --profile default add ./dsh-geo
 根据这篇笔记生成内容 Brief，包括受众、意图、大纲、常见问题和来源缺口。
 ```
 
+```text
+请对 https://example.com 执行完整流程，使用“产品教育”作为种子关键词，生成内容草稿计划，不要写入任何文件。
+```
+
 如果只想分析一个维度，可以指定 `focus=seo`、`focus=geo` 或 `focus=aeo`。
 
 ### 3. 写入前先预览
@@ -121,7 +151,7 @@ dsh plugin --profile default add ./dsh-geo
 4. 明确确认预览；写回前 Harness 还会再次请求审批。
 5. 应用预览。调用写回时只需提供 `path` 和 `previewToken`；完整 Markdown `content` 已绑定在令牌中，可以不重复传递。
 
-写回操作带有版本保护，文件在预览后被修改时会拒绝覆盖。遇到这种情况，应重新审计当前文件并生成新预览，不要强行应用旧修改。
+写回操作带有版本保护，文件在预览后被修改时会拒绝覆盖。遇到这种情况，应重新审计当前文件并生成新预览，不要强行应用旧修改。若要把新草稿保存成新笔记，可在 `geo_preview_content` 中使用 `createIfMissing=true`，但目标仍必须位于 `defaultRoot` 内。
 
 第一次可以直接这样说：
 
