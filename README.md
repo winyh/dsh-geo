@@ -1,5 +1,7 @@
 # 生成式引擎优化
 
+> **Language / 语言:** **English** · [中文](./README.zh.md)
+
 `dsh-geo` is a DeepSeek Harness bundle that gives the agent explainable SEO, GEO and AEO tools for Markdown knowledge bases.
 
 > Technical package ID: `dsh-geo` · DeepSeek Harness plugin for SEO, GEO and AEO
@@ -13,6 +15,26 @@
 - Preview or apply a complete Markdown replacement with a stale-version guard.
 
 The plugin is local-first. It analyzes files through the Harness filesystem service and does not upload knowledge-base content.
+
+## User and business pain points
+
+Teams publishing content for both search engines and AI answer engines commonly face these problems:
+
+- Traditional SEO checks focus on keywords and metadata, but do not explain whether an answer engine can understand, trust and cite the content.
+- Enterprise knowledge bases accumulate missing sources, stale notes, duplicate titles and orphan pages, making content quality difficult to govern at scale.
+- Writers, subject-matter experts and SEO teams use different review standards, so content decisions are slow and hard to reproduce.
+- Content optimization is often disconnected from the original Markdown source, creating manual copy-paste work and a risk of overwriting newer edits.
+- Teams may not be able to send private product, customer or internal knowledge-base content to an external GEO/SEO service.
+
+This plugin turns those needs into explainable, local-first checks with evidence, scores, priorities and guarded content updates.
+
+## Typical application scenarios
+
+- **Pre-publication review:** Check a new article, product page or technical note for SEO, GEO and AEO readiness before release.
+- **Knowledge-base governance:** Scan a team or enterprise Markdown vault to find missing metadata, weak provenance, stale content, orphan notes and duplicate titles.
+- **Content planning:** Convert a topic or existing note into a brief with audience, intent, outline, questions and source gaps.
+- **Product and technical documentation:** Improve documentation discoverability while preserving source context and review history.
+- **Agency and multi-brand operations:** Apply a consistent, auditable review framework across clients, sites or content teams without sharing the source vault with a third-party service.
 
 ## Included tools
 
@@ -33,7 +55,7 @@ dsh plugin --profile default add dsh-geo
 ## Install from GitHub
 
 ```bash
-dsh plugin --profile default add github:YOUR_GITHUB_USERNAME/dsh-geo
+dsh plugin --profile default add github:winyh/dsh-geo
 ```
 
 For a source checkout, the Harness developer preview requires the package build to be available during installation. Pin a release or commit when installing from GitHub.
