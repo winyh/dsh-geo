@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { auditNote } from './audit.js'
+import { auditNote, AUDIT_RULE_VERSION } from './audit.js'
 import { parseNote } from './markdown.js'
 import type { FileSystemLike, NoteSnapshot, ScanLimits, VaultAuditResult, VaultFileRecord } from './types.js'
 
@@ -20,7 +20,9 @@ export async function readNote(fs: FileSystemLike, filePath: string, limits: Sca
     throw new Error(`File exceeds maxFileBytes (${limits.maxFileBytes}): ${filePath}`)
   }
   const content = await fs.readText(target, signal)
-  return parseNote(displayPath(target, filePath), content.slice(0, limits.maxTextChars))
+  return parseNote(displayPath(target, filePath), content.slice(0, limits.maxTextChars), {
+    truncated: content.length > limits.maxTextChars,
+  })
 }
 
 export interface VaultScan {
@@ -64,8 +66,10 @@ export async function scanVault(fs: FileSystemLike, rootPath: string, limits: Sc
         continue
       }
       try {
-        const content = (await fs.readText(entry.target, signal)).slice(0, limits.maxTextChars)
-        files.push(parseNote(childPath, content))
+        const rawContent = await fs.readText(entry.target, signal)
+        files.push(parseNote(childPath, rawContent.slice(0, limits.maxTextChars), {
+          truncated: rawContent.length > limits.maxTextChars,
+        }))
       } catch (error) {
         skippedFiles += 1
         errors.push(`${childPath}: ${error instanceof Error ? error.message : String(error)}`)
@@ -80,6 +84,22 @@ function countValues(values: Array<string | undefined>): Record<string, number> 
   const result: Record<string, number> = {}
   for (const value of values) if (value) result[value] = (result[value] || 0) + 1
   return result
+}
+
+function linkKey(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '')
+    .replace(/\.(?:md|mdown)$/i, '')
+    .replace(/\/+/g, '/')
+    .toLowerCase()
+}
+
+function relativeKey(root: string, path: string): string {
+  const rootKey = linkKey(root).replace(/\/$/, '')
+  const pathKey = linkKey(path)
+  return pathKey.startsWith(`${rootKey}/`) ? pathKey.slice(rootKey.length + 1) : pathKey
 }
 
 function stale(updated: string | undefined): boolean {
@@ -104,12 +124,30 @@ export function summarizeVault(root: string, scan: VaultScan): VaultAuditResult 
       audit,
     }
   })
-  const pathByName = new Map(records.map((record) => [record.path.split(/[\\/]/).pop()?.replace(/\.md$/i, '').toLowerCase(), record.path]))
+  const pathByLink = new Map<string, string[]>()
+  for (const record of records) {
+    const relative = relativeKey(root, record.path)
+    const segments = relative.split('/')
+    const linkKeys = new Set([linkKey(record.path), relative])
+    for (let index = 0; index < segments.length; index += 1) {
+      linkKeys.add(segments.slice(index).join('/'))
+    }
+    for (const key of linkKeys) {
+      const paths = pathByLink.get(key) || []
+      paths.push(record.path)
+      pathByLink.set(key, paths)
+    }
+  }
   const referenced = new Set<string>()
+  let brokenLinks = 0
+  let ambiguousLinks = 0
   for (const record of records) {
     for (const link of record.internalLinks) {
-      const resolved = pathByName.get(link.split(/[\\/]/).pop()?.replace(/\.md$/i, '').toLowerCase())
-      if (resolved) referenced.add(resolved)
+      const key = linkKey(link)
+      const matches = pathByLink.get(key) || []
+      if (matches.length === 1) referenced.add(matches[0])
+      else if (matches.length > 1) ambiguousLinks += 1
+      else brokenLinks += 1
     }
   }
   const titleCounts = countValues(records.map((record) => record.title))
@@ -127,6 +165,7 @@ export function summarizeVault(root: string, scan: VaultScan): VaultAuditResult 
   return {
     root,
     generatedAt: new Date().toISOString(),
+    ruleVersion: AUDIT_RULE_VERSION,
     scannedFiles: records.length,
     skippedFiles: scan.skippedFiles,
     errors: scan.errors,
@@ -139,6 +178,8 @@ export function summarizeVault(root: string, scan: VaultScan): VaultAuditResult 
       },
       missingMetadata: records.filter((record) => !record.type || !record.status || !record.updated).length,
       missingSources: records.filter((record) => record.sourceUrls.length === 0).length,
+      brokenLinks,
+      ambiguousLinks,
       orphanNotes: records.filter((record) => records.length > 1 && !referenced.has(record.path)).length,
       duplicateTitles,
       staleNotes: records.filter((record) => stale(record.updated)).length,

@@ -2,7 +2,6 @@
     - id: dsh-geo
       name: dsh-geo
       config:
-        defaultRoot: "D:\\ObsidianData"
         maxFiles: 500
         maxFileBytes: 1048576
         maxTextChars: 180000

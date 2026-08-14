@@ -26,6 +26,8 @@ export interface NoteSnapshot {
   hasDefinition: boolean
   hasFacts: boolean
   hasNextStep: boolean
+  truncated: boolean
+  language: 'zh' | 'en' | 'mixed' | 'unknown'
 }
 
 export interface AuditFinding {
@@ -41,6 +43,10 @@ export interface AuditFinding {
 export interface AuditResult {
   target: string
   generatedAt: string
+  ruleVersion: string
+  confidence: number
+  unknownReasons: string[]
+  truncated: boolean
   scores: {
     seo: number
     geo: number
@@ -75,6 +81,7 @@ export interface VaultFileRecord {
 export interface VaultAuditResult {
   root: string
   generatedAt: string
+  ruleVersion: string
   scannedFiles: number
   skippedFiles: number
   errors: string[]
@@ -82,6 +89,8 @@ export interface VaultAuditResult {
     averageScores: { seo: number; geo: number; aeo: number; overall: number }
     missingMetadata: number
     missingSources: number
+    brokenLinks: number
+    ambiguousLinks: number
     orphanNotes: number
     duplicateTitles: string[]
     staleNotes: number
@@ -89,6 +98,21 @@ export interface VaultAuditResult {
     byType: Record<string, number>
   }
   priorityFiles: VaultFileRecord[]
+}
+
+export interface ContentBrief {
+  source: string
+  topic: string
+  intent: string
+  audience: string
+  scores: AuditResult['scores']
+  recommendedTitle: string
+  directAnswer: string
+  outline: string[]
+  questions: string[]
+  entities: string[]
+  sourceGaps: string[]
+  nextActions: string[]
 }
 
 export interface ScanLimits {

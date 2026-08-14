@@ -10,11 +10,11 @@ export const inject = ['tools', 'fs']
 export type Config = GeoConfig
 
 export const Config: Schema<GeoConfig> = Schema.object({
-  defaultRoot: Schema.string().default('D:\\ObsidianData'),
-  maxFiles: Schema.number().default(500),
-  maxFileBytes: Schema.number().default(1_048_576),
-  maxTextChars: Schema.number().default(180_000),
-  maxResultChars: Schema.number().default(50_000),
+  defaultRoot: Schema.string().default('.'),
+  maxFiles: Schema.number().step(1).min(1).max(5_000).default(500),
+  maxFileBytes: Schema.number().step(1).min(1_024).max(10_485_760).default(1_048_576),
+  maxTextChars: Schema.number().step(1).min(1_000).max(1_000_000).default(180_000),
+  maxResultChars: Schema.number().step(1).min(1_000).max(200_000).default(50_000),
 })
 
 export function apply(ctx: Context, config: GeoConfig): void {

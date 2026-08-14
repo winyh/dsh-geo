@@ -10,6 +10,9 @@ function parseScalar(raw: string): unknown {
     try {
       return JSON.parse(value)
     } catch {
+      if (value.startsWith('[') && value.endsWith(']')) {
+        return value.slice(1, -1).split(',').map((item) => parseScalar(item)).filter((item) => item !== '')
+      }
       return value
     }
   }
@@ -27,9 +30,29 @@ export function parseFrontmatter(content: string): { frontmatter: Frontmatter; b
   const end = lines.findIndex((line, index) => index > 0 && line.trim() === '---')
   if (end < 0) return { frontmatter: {}, body: content }
   const frontmatter: Frontmatter = {}
-  for (const line of lines.slice(1, end)) {
+  const frontmatterLines = lines.slice(1, end)
+  for (let index = 0; index < frontmatterLines.length; index += 1) {
+    const line = frontmatterLines[index]
     const match = /^\s*([^:#][^:]*):\s*(.*)$/.exec(line)
-    if (match) frontmatter[match[1].trim()] = parseScalar(match[2])
+    if (!match) continue
+    const key = match[1].trim()
+    const raw = match[2]
+    if (!raw.trim()) {
+      const items: unknown[] = []
+      let next = index + 1
+      while (next < frontmatterLines.length) {
+        const item = /^\s*-\s+(.+)$/.exec(frontmatterLines[next])
+        if (!item) break
+        items.push(parseScalar(item[1]))
+        next += 1
+      }
+      if (items.length > 0) {
+        frontmatter[key] = items
+        index = next - 1
+        continue
+      }
+    }
+    frontmatter[key] = parseScalar(raw)
   }
   return { frontmatter, body: lines.slice(end + 1).join('\n') }
 }
@@ -66,7 +89,23 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
 }
 
-export function parseNote(path: string, content: string): NoteSnapshot {
+function languageOf(text: string): NoteSnapshot['language'] {
+  const hasChinese = /[\u3400-\u9fff]/.test(text)
+  const hasLatin = /[A-Za-z]/.test(text)
+  if (hasChinese && hasLatin) return 'mixed'
+  if (hasChinese) return 'zh'
+  if (hasLatin) return 'en'
+  return 'unknown'
+}
+
+function countWords(text: string): number {
+  const chinese = (text.match(/[\u3400-\u9fff]/g) || []).length
+  const latinWords = text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || []
+  const numbers = text.match(/\b\d+(?:\.\d+)?\b/g) || []
+  return chinese + latinWords.length + numbers.length
+}
+
+export function parseNote(path: string, content: string, options: { truncated?: boolean } = {}): NoteSnapshot {
   const { frontmatter, body } = parseFrontmatter(content)
   const headings: string[] = []
   const headingLevels: number[] = []
@@ -107,7 +146,7 @@ export function parseNote(path: string, content: string): NoteSnapshot {
     frontmatter,
     headings,
     headingLevels,
-    wordCount: plain ? plain.split(/\s+/).length : 0,
+    wordCount: plain ? countWords(plain) : 0,
     internalLinks,
     externalLinks,
     sourceUrls,
@@ -120,5 +159,7 @@ export function parseNote(path: string, content: string): NoteSnapshot {
     hasDefinition: /\b(is|means|refers to|defined as)\b|是指|定义|指的是|是一种/.test(first.slice(0, 500)),
     hasFacts: /\d+(?:\.\d+)?\s*%?|20\d{2}年|据[^。！？]{2,30}(?:显示|指出|统计)/.test(plain),
     hasNextStep: /下一步|行动建议|建议先|可以开始|立即|next step|recommended action/i.test(body),
+    truncated: options.truncated === true,
+    language: languageOf(plain),
   }
 }

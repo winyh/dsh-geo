@@ -8,12 +8,26 @@
 
 - 审计单个 Markdown 笔记的 SEO、GEO、AEO 准备度。
 - 扫描知识库中的元数据缺失、来源缺失、孤立笔记和重复标题。
+- 在扫描前检查根目录是否可访问，并生成可交付的项目报告。
 - 生成内容 Brief：主题、关键词、意图、受众、大纲、用户问题和来源缺口。
 - 检查引用来源、来源字段和更新时间。
-- 先预览、后确认，使用版本保护安全写回 Markdown。
+- 先显示 diff、再审批，使用版本保护安全写回 Markdown。
 - 核心分析完全在本地完成，不依赖外部 GEO/SEO 服务。
 
 插件采用本地优先策略，不会上传知识库内容。
+
+## 工具
+
+| 工具 | 用途 |
+|---|---|
+| `geo_setup_check` | 检查根目录和扫描准备状态 |
+| `geo_audit_note` | 审计单个 Markdown 笔记 |
+| `geo_audit_vault` | 扫描整个知识库 |
+| `geo_project_report` | 生成结构化项目报告 |
+| `geo_content_brief` | 生成内容 Brief |
+| `geo_source_check` | 检查引用和来源可信度 |
+| `geo_preview_content` | 预览完整 Markdown 替换 |
+| `geo_apply_content` | 应用已审批且版本安全的修改 |
 
 ## 用户与企业痛点
 
@@ -47,6 +61,8 @@ dsh plugin --profile default add dsh-geo
 dsh plugin --profile default add github:winyh/dsh-geo
 ```
 
+从 GitHub 源码安装后，插件会自动构建。生产环境建议锁定已审核的 commit，例如 `github:winyh/dsh-geo#<commit>`，避免后续推送改变实际安装内容。
+
 ## GitHub 搜索
 
 将本目录发布为公开仓库，并在仓库 Topics 中添加 `dsh-plugin`。npm 元数据已经包含该关键词；GitHub 仓库 Topic 才能让项目出现在 Harness 插件主题列表中。
@@ -71,12 +87,22 @@ dsh plugin --profile default add ./dsh-geo
 
 ### 2. 使用自然语言调用
 
+安装到新环境后，建议先检查根目录：
+
+```text
+检查当前知识库根目录是否可以进行本地扫描。
+```
+
 ```text
 请审计这篇 Markdown 的 SEO、GEO、AEO，给出分数、证据和前五项行动建议。
 ```
 
 ```text
 扫描我的知识库，列出来源缺失、孤立链接和综合分数最低的笔记。
+```
+
+```text
+生成项目报告，包含 SEO、GEO、AEO 平均分、治理缺口和优先处理文件。
 ```
 
 ```text

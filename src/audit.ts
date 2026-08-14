@@ -1,4 +1,6 @@
-import type { AuditFinding, AuditResult, NoteSnapshot, Pillar, Severity } from './types.js'
+import type { AuditFinding, AuditResult, ContentBrief, NoteSnapshot, Pillar, Severity } from './types.js'
+
+export const AUDIT_RULE_VERSION = '0.2.0'
 
 const severityByImpact: Array<[number, Severity]> = [
   [18, 'critical'],
@@ -90,6 +92,10 @@ export function auditNote(note: NoteSnapshot): AuditResult {
   return {
     target: note.path,
     generatedAt: new Date().toISOString(),
+    ruleVersion: AUDIT_RULE_VERSION,
+    confidence: note.truncated ? 0.65 : 0.9,
+    unknownReasons: note.truncated ? ['内容超过 maxTextChars，部分判断可能基于截断内容。'] : [],
+    truncated: note.truncated,
     scores: { ...score, overall },
     stats: {
       wordCount: note.wordCount,
@@ -105,7 +111,7 @@ export function auditNote(note: NoteSnapshot): AuditResult {
   }
 }
 
-export function createContentBrief(note: NoteSnapshot, audit: AuditResult): Record<string, unknown> {
+export function createContentBrief(note: NoteSnapshot, audit: AuditResult): ContentBrief {
   const query = note.primaryQuery || note.title
   const intent = note.frontmatter.dsh_geo_intent || note.frontmatter.geo_intent || '信息理解与决策支持'
   const audience = note.frontmatter.audience || note.frontmatter.scope || '需要快速理解并执行该主题的读者'
@@ -115,8 +121,8 @@ export function createContentBrief(note: NoteSnapshot, audit: AuditResult): Reco
   return {
     source: note.path,
     topic: query,
-    intent,
-    audience,
+    intent: String(intent),
+    audience: String(audience),
     scores: audit.scores,
     recommendedTitle: `${query}：定义、方法、场景与常见问题`,
     directAnswer: note.firstParagraph || `本文解释${query}的核心定义、适用场景和执行方法。`,

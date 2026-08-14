@@ -28,5 +28,13 @@ GEO 是生成式引擎优化，用于让 AI 更准确地理解和引用内容。
     expect(note.internalLinks).toEqual(['SEO'])
     expect(note.questionHeadings).toEqual(['如何开始？'])
     expect(note.listCount).toBe(2)
+    expect(note.language).toBe('mixed')
+    expect(note.truncated).toBe(false)
+  })
+
+  it('marks truncated content so scoring can lower confidence', () => {
+    const note = parseNote('long.md', '# Long\n\nEnglish content', { truncated: true })
+    expect(note.truncated).toBe(true)
+    expect(note.language).toBe('en')
   })
 })

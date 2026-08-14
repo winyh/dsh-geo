@@ -10,9 +10,10 @@
 
 - Audit one Markdown note for SEO, GEO and AEO readiness.
 - Scan a vault for metadata gaps, missing sources, broken knowledge structure, orphan notes and duplicate titles.
+- Check the configured root before scanning and create a shareable project report.
 - Build a content brief with query, intent, audience, outline, questions and source gaps.
 - Check source provenance and freshness fields.
-- Preview or apply a complete Markdown replacement with a stale-version guard.
+- Preview or apply a complete Markdown replacement with a diff card, approval gate and stale-version guard.
 
 The plugin is local-first. It analyzes files through the Harness filesystem service and does not upload knowledge-base content.
 
@@ -40,11 +41,14 @@ This plugin turns those needs into explainable, local-first checks with evidence
 
 | Tool | Purpose |
 |---|---|
+| `geo_setup_check` | Verify root access and scan readiness |
 | `geo_audit_note` | Audit one Markdown note |
 | `geo_audit_vault` | Scan a knowledge base |
+| `geo_project_report` | Create a structured project report |
 | `geo_content_brief` | Generate a structured content brief |
 | `geo_source_check` | Check citations and provenance |
-| `geo_apply_content` | Preview or guarded-write Markdown |
+| `geo_preview_content` | Preview a complete Markdown replacement |
+| `geo_apply_content` | Apply an approved, version-guarded replacement |
 
 ## Install from npm
 
@@ -58,7 +62,7 @@ dsh plugin --profile default add dsh-geo
 dsh plugin --profile default add github:winyh/dsh-geo
 ```
 
-For a source checkout, the Harness developer preview requires the package build to be available during installation. Pin a release or commit when installing from GitHub.
+The package builds itself after a GitHub source install. For reproducible deployments, pin the command to a reviewed commit, for example `github:winyh/dsh-geo#<commit>`.
 
 ## GitHub discoverability
 
@@ -84,12 +88,22 @@ dsh plugin --profile default add ./dsh-geo
 
 ### 2. Ask with natural language
 
+Start with a readiness check when installing into a new environment:
+
+```text
+Check whether the configured knowledge-base root is ready for a local scan.
+```
+
 ```text
 Audit this Markdown note for SEO, GEO and AEO. Show scores, evidence and the top five actions.
 ```
 
 ```text
 Scan my knowledge base and list notes with missing sources, orphan links and the lowest overall scores.
+```
+
+```text
+Create a project report with average SEO, GEO and AEO scores, governance gaps and priority files.
 ```
 
 ```text
