@@ -1,5 +1,5 @@
 import type { WebRuntime, WebFetchResult } from '@deepseek-ai/dsh-web'
-import type { FileSystemLike, NoteSnapshot, ScanLimits, SourceType } from './types.js'
+import type { FileSystemLike, NoteSnapshot, ScanLimits, SourceType, TechnicalSeoSnapshot } from './types.js'
 import { parseNote } from './markdown.js'
 
 export interface SourceDocument {
@@ -12,6 +12,7 @@ export interface SourceDocument {
   capturedAt: string
   truncated: boolean
   accessNote: string
+  technical?: TechnicalSeoSnapshot
 }
 
 export function isPublicUrl(value: string): boolean {
@@ -81,6 +82,56 @@ export function htmlToMarkdown(html: string, baseUrl?: string): string {
   return withHeading.trim()
 }
 
+function attributeOf(tag: string, name: string): string {
+  const match = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag)
+  return decodeHtmlEntities(match?.[1] || match?.[2] || match?.[3] || '').trim()
+}
+
+function resolveUrl(value: string, baseUrl?: string): string {
+  if (!value) return ''
+  try {
+    return baseUrl ? new URL(value, baseUrl).toString() : value
+  } catch {
+    return value
+  }
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
+}
+
+export function extractTechnicalSeo(html: string, baseUrl?: string): TechnicalSeoSnapshot {
+  const title = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]
+  const metaDescription = [...html.matchAll(/<meta\b[^>]*>/gi)]
+    .map((match) => match[0])
+    .find((tag) => attributeOf(tag, 'name').toLocaleLowerCase() === 'description')
+  const robots = [...html.matchAll(/<meta\b[^>]*>/gi)]
+    .map((match) => match[0])
+    .find((tag) => attributeOf(tag, 'name').toLocaleLowerCase() === 'robots')
+  const canonicalTag = [...html.matchAll(/<link\b[^>]*>/gi)]
+    .map((match) => match[0])
+    .find((tag) => attributeOf(tag, 'rel').toLocaleLowerCase().split(/\s+/).includes('canonical'))
+  const hreflangCount = [...html.matchAll(/<link\b[^>]*>/gi)]
+    .map((match) => match[0])
+    .filter((tag) => attributeOf(tag, 'rel').toLocaleLowerCase().split(/\s+/).includes('alternate') && Boolean(attributeOf(tag, 'hreflang')))
+    .length
+  const structuredDataTypes = unique([...html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+    .flatMap((match) => [...match[1].matchAll(/"@type"\s*:\s*"([^"]+)"/g)].map((typeMatch) => typeMatch[1])))
+  const images = [...html.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0])
+  return {
+    htmlTitle: title ? inlineHtmlToMarkdown(title) : undefined,
+    metaDescription: metaDescription ? attributeOf(metaDescription, 'content') : undefined,
+    canonicalUrl: canonicalTag ? resolveUrl(attributeOf(canonicalTag, 'href'), baseUrl) : undefined,
+    robots: robots ? attributeOf(robots, 'content') : undefined,
+    hreflangCount,
+    structuredDataTypes,
+    imageCount: images.length,
+    imagesMissingAlt: images.filter((tag) => !attributeOf(tag, 'alt')).length,
+    hasViewport: [...html.matchAll(/<meta\b[^>]*>/gi)].some((match) => attributeOf(match[0], 'name').toLocaleLowerCase() === 'viewport'),
+    hasLang: /<html\b[^>]*\blang\s*=/i.test(html),
+  }
+}
+
 function snapshotFrontmatter(source: string, sourceType: SourceType, capturedAt: string): string {
   return [
     '---',
@@ -114,7 +165,9 @@ export function createSourceDocument(
   },
 ): SourceDocument {
   const capturedAt = new Date().toISOString()
-  const converted = options.bodyKind === 'html' ? htmlToMarkdown(rawContent, options.finalUrl || source) : rawContent
+  const resolvedSourceUrl = options.finalUrl || source
+  const technical = options.bodyKind === 'html' ? extractTechnicalSeo(rawContent, resolvedSourceUrl) : undefined
+  const converted = options.bodyKind === 'html' ? htmlToMarkdown(rawContent, resolvedSourceUrl) : rawContent
   const bounded = limitedContent(converted, limits)
   const content = options.addSourceFrontmatter === false
     ? bounded.content
@@ -122,13 +175,14 @@ export function createSourceDocument(
   return {
     source,
     sourceType,
-    note: parseNote(source, content, { truncated: Boolean(options.truncated) || bounded.truncated }),
+    note: parseNote(source, content, { truncated: Boolean(options.truncated) || bounded.truncated, technical }),
     finalUrl: options.finalUrl || '',
     statusCode: options.statusCode || 0,
     bodyKind: options.bodyKind,
     capturedAt,
     truncated: Boolean(options.truncated) || bounded.truncated,
     accessNote: options.accessNote,
+    ...(technical ? { technical } : {}),
   }
 }
 

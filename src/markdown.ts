@@ -1,4 +1,4 @@
-import type { Frontmatter, NoteSnapshot } from './types.js'
+import type { Frontmatter, NoteSnapshot, TechnicalSeoSnapshot } from './types.js'
 
 function parseScalar(raw: string): unknown {
   const value = raw.trim()
@@ -105,7 +105,7 @@ function countWords(text: string): number {
   return chinese + latinWords.length + numbers.length
 }
 
-export function parseNote(path: string, content: string, options: { truncated?: boolean } = {}): NoteSnapshot {
+export function parseNote(path: string, content: string, options: { truncated?: boolean; technical?: TechnicalSeoSnapshot } = {}): NoteSnapshot {
   const { frontmatter, body } = parseFrontmatter(content)
   const headings: string[] = []
   const headingLevels: number[] = []
@@ -161,5 +161,6 @@ export function parseNote(path: string, content: string, options: { truncated?: 
     hasNextStep: /下一步|行动建议|建议先|可以开始|立即|next step|recommended action/i.test(body),
     truncated: options.truncated === true,
     language: languageOf(plain),
+    ...(options.technical ? { technical: options.technical } : {}),
   }
 }

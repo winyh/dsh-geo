@@ -16,9 +16,26 @@
 - Build a qualitative keyword plan from source signals, optional seed terms and Harness web search results; it never invents search volume.
 - Turn the diagnosis into a four-stage production plan: diagnose, map keywords, draft, and verify.
 - Check source provenance and freshness fields.
+- Map the available source to a Google Search Essentials checklist: people-first content, topic language, title/description, crawlable links, HTTPS, canonical/robots signals, structured data, image alt and mobile viewport.
+- Use related local knowledge-base titles, headings, entities and queries as a private keyword/content input dimension.
 - Preview or apply a complete Markdown replacement, including safe creation of a new note inside `defaultRoot`.
 
 The plugin is local-first. Core analysis runs through the Harness filesystem service. Public URLs use the official anonymous `ctx.web` fetch seam; cookies and credentials are never used. Private or JavaScript-rendered pages should be exported as Markdown/HTML and analyzed as a local snapshot.
+
+## Standard SEO assistance
+
+The built-in standard is based on [Google Search Essentials](https://developers.google.com/search/docs/essentials?hl=zh-cn), the [SEO Starter Guide](https://developers.google.com/search/docs/fundamentals/seo-starter-guide?hl=zh-cn) and the [SEO maintenance guidance](https://developers.google.com/search/docs/fundamentals/get-started?hl=zh-cn). It is an execution checklist, not a ranking guarantee.
+
+For one `geo_workflow` run, the plugin combines four dimensions:
+
+1. **Source evidence:** the page or Markdown note, its intent, facts, headings, links and provenance.
+2. **Local knowledge base:** related note titles, headings, entities, primary queries and bounded local excerpts from `defaultRoot`; this stays local.
+3. **Keyword signals:** user seed terms, source signals and qualitative public search result titles/snippets when the source is a public URL.
+4. **SEO standard:** content, crawl/index, search presentation, links, media and monitoring checks.
+
+The returned `productionPlan.contentInputs` makes these dimensions explicit before drafting. The model can then produce a Markdown draft, and `geo_preview_content`/`geo_apply_content` provide the reviewable writeback path.
+
+The plugin deliberately reports `unknown` when a source cannot prove a deployment-level fact. It does not replace Search Console, PageSpeed, a full public-site crawler or a paid keyword-volume provider. Sitemap coverage, indexing, queries, clicks, Core Web Vitals and server-level robots behavior must be checked with the appropriate external tool after publication.
 
 ## User and business pain points
 
@@ -48,7 +65,7 @@ This plugin turns those needs into explainable, local-first checks with evidence
 | `geo_audit_note` | Audit one Markdown note |
 | `geo_audit_vault` | Scan a knowledge base |
 | `geo_project_report` | Create a structured project report |
-| `geo_workflow` | Run URL/snapshot diagnosis, keyword planning and content production planning |
+| `geo_workflow` | Run URL/snapshot diagnosis, Google-standard checks, private knowledge-base keyword planning and content production planning |
 | `geo_content_brief` | Generate a structured content brief |
 | `geo_source_check` | Check citations and provenance |
 | `geo_preview_content` | Preview a complete Markdown replacement |
@@ -232,6 +249,7 @@ The source boundary is deliberate:
 - Public `http(s)` URLs are fetched anonymously through Harness `ctx.web`.
 - Public pages that require JavaScript rendering should be saved/exported as Markdown or HTML first.
 - Private account pages are supported through a local Markdown/HTML snapshot; browser cookies and platform credentials do not enter the plugin.
+- `geo_workflow` uses `defaultRoot` by default to find related local notes. It uses local titles, headings, entities, queries and bounded excerpts as context; this context is not sent to public search. Say `useKnowledgeBase=false` when you want a source-only run.
 - Local Markdown/HTML inputs do not send extracted terms to public search; their keyword plan stays `seed-only` unless you explicitly provide external keyword data yourself.
 - Search results provide qualitative topic signals only. Search volume, ranking difficulty and traffic require a separate data source and are not fabricated by this plugin.
 
@@ -259,6 +277,10 @@ Create a content brief from this note, including audience, intent, outline, ques
 
 ```text
 Run the complete workflow for https://example.com, use "product education" as the seed keyword, and generate a draft plan without writing anything.
+```
+
+```text
+Run geo_workflow for https://example.com. Use the related notes in my configured knowledge base as private context. Combine the source evidence, Google-standard warnings and keyword map into the content inputs. Do not write files.
 ```
 
 Use `focus=seo`, `focus=geo` or `focus=aeo` when you only want one assessment pillar.

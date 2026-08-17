@@ -8,8 +8,46 @@ export type KeywordIntent = 'informational' | 'commercial' | 'navigational' | 't
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
+export type SeoCheckStatus = 'pass' | 'warn' | 'unknown'
+
+export type SeoCheckArea = 'content' | 'crawl-index' | 'search-presentation' | 'links' | 'media' | 'monitoring'
+
 export interface Frontmatter {
   [key: string]: unknown
+}
+
+export interface TechnicalSeoSnapshot {
+  htmlTitle?: string
+  metaDescription?: string
+  canonicalUrl?: string
+  robots?: string
+  hreflangCount: number
+  structuredDataTypes: string[]
+  imageCount: number
+  imagesMissingAlt: number
+  hasViewport: boolean
+  hasLang: boolean
+}
+
+export interface SeoStandardCheck {
+  id: string
+  area: SeoCheckArea
+  status: SeoCheckStatus
+  evidence: string
+  recommendation: string
+}
+
+export interface SeoStandardReport {
+  framework: string
+  ruleVersion: string
+  checks: SeoStandardCheck[]
+  summary: {
+    pass: number
+    warn: number
+    unknown: number
+  }
+  limitations: string[]
+  references: string[]
 }
 
 export interface NoteSnapshot {
@@ -34,6 +72,7 @@ export interface NoteSnapshot {
   hasNextStep: boolean
   truncated: boolean
   language: 'zh' | 'en' | 'mixed' | 'unknown'
+  technical?: TechnicalSeoSnapshot
 }
 
 export interface AuditFinding {
@@ -68,6 +107,7 @@ export interface AuditResult {
     entities: number
     questions: number
   }
+  seoStandard: SeoStandardReport
   findings: AuditFinding[]
   topActions: string[]
 }
@@ -134,6 +174,15 @@ export interface KeywordSearchSignal {
   observedTitles: string[]
 }
 
+export interface KnowledgeSignal {
+  path: string
+  title: string
+  score: number
+  matchedTerms: string[]
+  candidateTerms: string[]
+  excerpt: string
+}
+
 export interface KeywordPlan {
   status: 'ready' | 'partial' | 'seeds-only'
   dataQuality: 'qualitative' | 'seed-only'
@@ -141,6 +190,8 @@ export interface KeywordPlan {
   primaryKeyword: string
   candidates: KeywordCandidate[]
   searchSignals: KeywordSearchSignal[]
+  knowledgeSignals: KnowledgeSignal[]
+  seoGuidance: string[]
   adjustments: string[]
   unknownReasons: string[]
 }
@@ -154,6 +205,12 @@ export interface ProductionStage {
 
 export interface ProductionPlan {
   stages: ProductionStage[]
+  contentInputs: {
+    source: string[]
+    knowledgeBase: string[]
+    seoStandard: string[]
+    keywordMap: string[]
+  }
   draftContract: {
     requiredSections: string[]
     evidenceRules: string[]

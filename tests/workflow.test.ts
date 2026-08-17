@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { auditNote } from '../src/audit.js'
+import { auditNote, createContentBrief } from '../src/audit.js'
 import { parseNote } from '../src/markdown.js'
 import { buildKeywordPlan, buildProductionPlan } from '../src/workflow.js'
 
@@ -41,5 +41,20 @@ describe('complete content workflow', () => {
     expect(plan.dataQuality).toBe('qualitative')
     expect(production.stages.map((stage) => stage.id)).toEqual(['diagnose', 'keyword-map', 'draft', 'verify'])
     expect(production.draftContract.evidenceRules.length).toBeGreaterThan(0)
+  })
+
+  it('uses related local knowledge notes as a private keyword and content input dimension', async () => {
+    const note = parseNote('product.md', `---\nkeyword: knowledge base\n---\n\n# Knowledge base\n\nA knowledge base is a structured source of answers for product teams.\n\n## How does it work?\n\nIt organizes facts and links.\n`)
+    const related = parseNote('guides/seo.md', `---\nkeyword: technical SEO\n---\n\n# Technical SEO for a knowledge base\n\n## Sitemap and canonical URLs\n\nUse a sitemap and canonical URL when publishing related pages.\n`)
+    const audit = auditNote(note)
+    const plan = await buildKeywordPlan(note, audit, undefined, ['knowledge base'], undefined, [related], audit.seoStandard)
+    const brief = createContentBrief(note, audit)
+    const production = buildProductionPlan(brief, audit, plan)
+    expect(plan.knowledgeSignals).toHaveLength(1)
+    expect(plan.knowledgeSignals[0].candidateTerms).toContain('technical SEO')
+    expect(plan.knowledgeSignals[0].excerpt).toContain('technical SEO')
+    expect(production.contentInputs.knowledgeBase[0]).toContain('local excerpt')
+    expect(production.contentInputs.source[0]).toContain('product.md')
+    expect(production.contentInputs.seoStandard.length).toBeGreaterThan(0)
   })
 })

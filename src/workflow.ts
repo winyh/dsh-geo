@@ -1,5 +1,5 @@
 import type { WebRuntime, WebSearchResult } from '@deepseek-ai/dsh-web'
-import type { AuditResult, ContentBrief, KeywordCandidate, KeywordIntent, KeywordPlan, NoteSnapshot, ProductionPlan } from './types.js'
+import type { AuditResult, ContentBrief, KeywordCandidate, KeywordIntent, KeywordPlan, KnowledgeSignal, NoteSnapshot, ProductionPlan, SeoStandardReport } from './types.js'
 
 interface SearchLike {
   search(request: { query: string; maxResults?: number }, signal?: AbortSignal): Promise<WebSearchResult>
@@ -53,6 +53,38 @@ function seedTerms(note: NoteSnapshot, seeds: string[]): string[] {
   ]).slice(0, 24)
 }
 
+function relatedKnowledge(note: NoteSnapshot, knowledgeNotes: NoteSnapshot[]): KnowledgeSignal[] {
+  const anchors = unique([
+    note.primaryQuery || '',
+    note.title,
+    ...note.entities.slice(0, 8),
+    ...note.headings.slice(0, 8),
+  ]).filter((term) => term.length >= 2).slice(0, 16)
+  const sourcePath = note.path.toLocaleLowerCase()
+  return knowledgeNotes
+    .filter((candidate) => candidate.path.toLocaleLowerCase() !== sourcePath)
+    .map((candidate) => {
+      const searchable = [candidate.title, candidate.primaryQuery || '', ...candidate.headings, ...candidate.entities].join('\n').toLocaleLowerCase()
+      const matchedTerms = anchors.filter((term) => searchable.includes(term.toLocaleLowerCase())).slice(0, 8)
+      const candidateTerms = unique([
+        candidate.primaryQuery || '',
+        ...candidate.headings.slice(0, 5),
+        ...candidate.entities.slice(0, 5),
+      ]).filter((term) => !matchedTerms.some((matched) => matched.toLocaleLowerCase() === term.toLocaleLowerCase())).slice(0, 8)
+      return {
+        path: candidate.path,
+        title: candidate.title,
+        score: matchedTerms.length * 10 + Math.min(candidate.wordCount, 500) / 100,
+        matchedTerms,
+        candidateTerms,
+        excerpt: candidate.content.replace(/\s+/g, ' ').trim().slice(0, 800),
+      }
+    })
+    .filter((signal) => signal.matchedTerms.length > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+}
+
 function searchQueries(primary: string, note: NoteSnapshot): string[] {
   const suffix = /[\u3400-\u9fff]/.test(primary) ? ['常见问题', '使用方法'] : ['common questions', 'how to use']
   return unique([primary, ...suffix.map((item) => `${primary} ${item}`), note.title]).slice(0, 3)
@@ -64,8 +96,12 @@ export async function buildKeywordPlan(
   web: SearchLike | WebRuntime | undefined,
   seeds: string[] = [],
   signal?: AbortSignal,
+  knowledgeNotes: NoteSnapshot[] = [],
+  seoStandard?: SeoStandardReport,
 ): Promise<KeywordPlan> {
-  const terms = seedTerms(note, seeds)
+  const knowledgeSignals = relatedKnowledge(note, knowledgeNotes)
+  const knowledgeTerms = knowledgeSignals.flatMap((signal) => signal.candidateTerms)
+  const terms = seedTerms(note, [...seeds, ...knowledgeTerms])
   const primaryKeyword = cleanTerm(seeds[0] || note.primaryQuery || note.title)
   const observed = new Set<string>()
   const searchSignals: KeywordPlan['searchSignals'] = []
@@ -99,16 +135,23 @@ export async function buildKeywordPlan(
         ? ['source heading']
         : note.entities.includes(term)
           ? ['source entity']
-          : searchSignals.some((signal) => signal.observedTitles.includes(term))
+          : knowledgeTerms.some((candidate) => candidate.toLocaleLowerCase() === term.toLocaleLowerCase())
+            ? ['related local knowledge-base note signal']
+            : searchSignals.some((signal) => signal.observedTitles.includes(term))
             ? ['qualitative search result title/snippet signal']
             : ['source text signal']
     return { term, role, intent: intentOf(term, role), evidence }
   })
+  const seoGuidance = seoStandard?.checks
+    .filter((item) => item.status === 'warn')
+    .slice(0, 6)
+    .map((item) => `${item.id}: ${item.recommendation}`) || []
   const adjustments = [
     primaryKeyword ? `Use "${primaryKeyword}" as the single primary query in the title, H1 and opening answer.` : 'Choose one explicit primary query before drafting.',
     'Map each secondary term to one section or supporting paragraph; do not repeat variants unnaturally.',
     'Turn question terms into H2/H3 questions and answer each one directly before adding context.',
     'Use entities to define scope and relationships, not as a disconnected keyword list.',
+    ...seoGuidance,
     'Search signals are qualitative only; do not claim search volume, ranking difficulty or traffic without a dedicated data source.',
   ]
   return {
@@ -118,6 +161,8 @@ export async function buildKeywordPlan(
     primaryKeyword,
     candidates,
     searchSignals,
+    knowledgeSignals,
+    seoGuidance,
     adjustments,
     unknownReasons,
   }
@@ -125,6 +170,23 @@ export async function buildKeywordPlan(
 
 export function buildProductionPlan(brief: ContentBrief, audit: AuditResult, keywordPlan: KeywordPlan): ProductionPlan {
   return {
+    contentInputs: {
+      source: [
+        `Source: ${brief.source}`,
+        `Topic: ${brief.topic}`,
+        `Intent: ${brief.intent}`,
+        `Audience: ${brief.audience}`,
+        `Direct answer: ${brief.directAnswer}`,
+        ...(brief.sourceGaps.length > 0 ? [`Source gaps: ${brief.sourceGaps.join('; ')}`] : []),
+      ],
+      knowledgeBase: keywordPlan.knowledgeSignals.length > 0
+        ? keywordPlan.knowledgeSignals.map((signal) => `${signal.title} (${signal.path}) — matched: ${signal.matchedTerms.join(', ')}; candidate terms: ${signal.candidateTerms.join(', ')}; local excerpt: ${signal.excerpt}`)
+        : ['No related local knowledge-base notes were found or knowledge-base context was not enabled.'],
+      seoStandard: keywordPlan.seoGuidance.length > 0
+        ? keywordPlan.seoGuidance
+        : ['No current Google-standard warning was raised by the available source; keep deployment-level checks marked unknown until HTML/Search Console validation.'],
+      keywordMap: keywordPlan.candidates.slice(0, 18).map((candidate) => `${candidate.role}/${candidate.intent}: ${candidate.term} — ${candidate.evidence.join(', ')}`),
+    },
     stages: [
       {
         id: 'diagnose',

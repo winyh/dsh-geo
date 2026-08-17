@@ -27,6 +27,43 @@ const findingOutputSchema = {
   },
 } as const
 
+const seoStandardSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    framework: { type: 'string', required: true },
+    ruleVersion: { type: 'string', required: true },
+    checks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true },
+          area: { type: 'string', enum: ['content', 'crawl-index', 'search-presentation', 'links', 'media', 'monitoring'], required: true },
+          status: { type: 'string', enum: ['pass', 'warn', 'unknown'], required: true },
+          evidence: { type: 'string', required: true },
+          recommendation: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    summary: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pass: { type: 'number', required: true },
+        warn: { type: 'number', required: true },
+        unknown: { type: 'number', required: true },
+      },
+      required: true,
+    },
+    limitations: { type: 'array', items: { type: 'string' }, required: true },
+    references: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
 const auditOutputSchema = {
   type: 'object',
   additionalProperties: false,
@@ -63,6 +100,7 @@ const auditOutputSchema = {
       },
       required: true,
     },
+    seoStandard: seoStandardSchema,
     findings: { type: 'array', items: findingOutputSchema, required: true },
     topActions: { type: 'array', items: { type: 'string' }, required: true },
   },
@@ -90,6 +128,7 @@ const vaultAuditSchema = {
       required: true,
     },
     stats: { type: 'json', required: true },
+    seoStandard: seoStandardSchema,
     findings: { type: 'array', items: findingOutputSchema, required: true },
     topActions: { type: 'array', items: { type: 'string' }, required: true },
   },
@@ -327,6 +366,24 @@ const keywordPlanSchema = {
       },
       required: true,
     },
+    knowledgeSignals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+          score: { type: 'number', required: true },
+          matchedTerms: { type: 'array', items: { type: 'string' }, required: true },
+          candidateTerms: { type: 'array', items: { type: 'string' }, required: true },
+          excerpt: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    seoGuidance: { type: 'array', items: { type: 'string' }, required: true },
     adjustments: { type: 'array', items: { type: 'string' }, required: true },
     unknownReasons: { type: 'array', items: { type: 'string' }, required: true },
   },
@@ -336,6 +393,17 @@ const productionPlanSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    contentInputs: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        source: { type: 'array', items: { type: 'string' }, required: true },
+        knowledgeBase: { type: 'array', items: { type: 'string' }, required: true },
+        seoStandard: { type: 'array', items: { type: 'string' }, required: true },
+        keywordMap: { type: 'array', items: { type: 'string' }, required: true },
+      },
+      required: true,
+    },
     stages: {
       type: 'array',
       items: {
@@ -391,6 +459,35 @@ const workflowOutputSchema = {
         capturedAt: { type: 'string', required: true },
         truncated: { type: 'boolean', required: true },
         note: { type: 'string', required: true },
+      },
+      required: true,
+    },
+    knowledgeBase: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        enabled: { type: 'boolean', required: true },
+        scannedFiles: { type: 'number', required: true },
+        skippedFiles: { type: 'number', required: true },
+        relatedNotes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              path: { type: 'string', required: true },
+              title: { type: 'string', required: true },
+              score: { type: 'number', required: true },
+              matchedTerms: { type: 'array', items: { type: 'string' }, required: true },
+              candidateTerms: { type: 'array', items: { type: 'string' }, required: true },
+              excerpt: { type: 'string', required: true },
+            },
+            required: true,
+          },
+          required: true,
+        },
+        errors: { type: 'array', items: { type: 'string' }, required: true },
+        privacy: { type: 'string', required: true },
       },
       required: true,
     },
@@ -539,8 +636,8 @@ function applyWorkflowContext(
   }
 }
 
-function workflowStatus(document: SourceDocument, keywordPlan: KeywordPlan): 'ready' | 'partial' {
-  return document.truncated || keywordPlan.status !== 'ready' ? 'partial' : 'ready'
+function workflowStatus(document: SourceDocument, keywordPlan: KeywordPlan, knowledgeErrors: string[] = []): 'ready' | 'partial' {
+  return document.truncated || keywordPlan.status !== 'ready' || knowledgeErrors.length > 0 ? 'partial' : 'ready'
 }
 
 export function resolveRootPath(config: Pick<GeoConfig, 'defaultRoot'>, requested?: string): string {
@@ -566,8 +663,8 @@ export function resolvePreviewContent(previewContent: string | undefined, reques
   return previewContent
 }
 
-function focusAudit(note: Parameters<typeof auditNote>[0], focus?: AuditFocus): ReturnType<typeof auditNote> & { focus: AuditFocus } {
-  const audit = auditNote(note)
+function focusAudit(note: Parameters<typeof auditNote>[0], focus?: AuditFocus, context?: Parameters<typeof auditNote>[1]): ReturnType<typeof auditNote> & { focus: AuditFocus } {
+  const audit = auditNote(note, context)
   if (!focus || focus === 'all') return { ...audit, focus: 'all' }
   const findings = audit.findings.filter((finding) => finding.pillar === focus)
   return {
@@ -695,6 +792,8 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       goal: { type: 'string', description: 'Optional business or user goal, such as leads, product education, documentation discovery or support deflection.' },
       audience: { type: 'string', description: 'Optional target audience to use in the production brief.' },
       seedKeywords: { type: 'array', items: { type: 'string' }, description: 'Optional terms supplied by the user; the first term becomes the primary query.' },
+      useKnowledgeBase: { type: 'boolean', description: 'Optional; defaults to true and uses local Markdown titles, headings, entities, queries and bounded excerpts as private context for related terms and content inputs.' },
+      knowledgeMaxFiles: { type: 'integer', description: 'Optional local knowledge-base scan cap; never exceeds configured maxFiles.' },
     },
     output: {
       schema: workflowOutputSchema,
@@ -713,10 +812,38 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         }
         document = await readLocalDocument(fs, path, config, exec.signal)
       }
-      const audit = focusAudit(document.note, 'all')
+      const audit = focusAudit(document.note, 'all', { sourceType: document.sourceType, finalUrl: document.finalUrl })
+      const knowledgeEnabled = args.useKnowledgeBase !== false
+      let knowledgeNotes: Awaited<ReturnType<typeof scanVault>>['files'] = []
+      let knowledgeSkippedFiles = 0
+      let knowledgeErrors: string[] = []
+      if (knowledgeEnabled) {
+        try {
+          const knowledgeRoot = resolveRootPath(config)
+          await ensureInsideRoot(fs, config, knowledgeRoot, exec.signal)
+          const limits = {
+            ...config,
+            maxFiles: Math.min(config.maxFiles, Math.max(1, args.knowledgeMaxFiles || config.maxFiles)),
+          }
+          const scan = await scanVault(fs, knowledgeRoot, limits, exec.signal)
+          knowledgeNotes = scan.files
+          knowledgeSkippedFiles = scan.skippedFiles
+          knowledgeErrors = scan.errors
+        } catch (error) {
+          knowledgeErrors = [error instanceof Error ? error.message : String(error)]
+        }
+      }
       // Never send terms extracted from a local Markdown/HTML file to public
       // search. This keeps private snapshots and local knowledge bases local.
-      const keywordPlan = await buildKeywordPlan(document.note, audit, isPublicUrl(source) ? ctx.web : undefined, args.seedKeywords || [], exec.signal)
+      const keywordPlan = await buildKeywordPlan(
+        document.note,
+        audit,
+        isPublicUrl(source) ? ctx.web : undefined,
+        args.seedKeywords || [],
+        exec.signal,
+        knowledgeNotes,
+        audit.seoStandard,
+      )
       const contentBrief = applyWorkflowContext(
         document,
         createContentBrief(document.note, audit),
@@ -728,7 +855,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       return {
         source,
         sourceType: document.sourceType,
-        status: workflowStatus(document, keywordPlan),
+        status: workflowStatus(document, keywordPlan, knowledgeErrors),
         access: {
           mode: isPublicUrl(source) ? 'public-url' as const : 'local-file' as const,
           credentialsUsed: false,
@@ -743,6 +870,14 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
           capturedAt: document.capturedAt,
           truncated: document.truncated,
           note: document.accessNote,
+        },
+        knowledgeBase: {
+          enabled: knowledgeEnabled,
+          scannedFiles: knowledgeNotes.length,
+          skippedFiles: knowledgeSkippedFiles,
+          relatedNotes: keywordPlan.knowledgeSignals,
+          errors: knowledgeErrors,
+          privacy: 'Knowledge-base context stays inside the Harness filesystem. Its titles, headings, entities, queries and bounded excerpts are not sent to public search; only explicit user seedKeywords may be used for URL search signals.',
         },
         audit,
         keywordPlan,

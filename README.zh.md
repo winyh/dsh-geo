@@ -14,10 +14,27 @@
 - 根据来源信号、用户提供的种子词和 Harness 搜索结果生成定性关键词计划，不虚构搜索量。
 - 将诊断结果落成四阶段内容生产计划：诊断、关键词映射、写作、验证。
 - 检查引用来源、来源字段和更新时间。
+- 将当前来源映射到 Google 搜索要素清单：以用户为中心的内容、主题词、标题/描述、可抓取链接、HTTPS、canonical/robots 信号、结构化数据、图片 alt 和移动端 viewport。
+- 将本地知识库中的相关标题、小标题、实体和主查询作为私有的关键词与内容输入维度。
 - 先显示 diff，再使用版本保护安全写回 Markdown；也支持在根目录内安全创建新笔记。
 - 核心分析在本地完成，公开 URL 通过 Harness 官方 `ctx.web` 能力读取，不依赖 GEO-PRO。
 
 插件采用本地优先策略，不会使用 Cookie 或账号凭据。私有账号主页和需要 JavaScript 渲染的页面，请先导出为 Markdown/HTML 快照，再放入 `defaultRoot` 内分析。
+
+## 标准 SEO 辅助范围
+
+内置标准参考 [Google 搜索要素](https://developers.google.com/search/docs/essentials?hl=zh-cn)、[SEO 入门指南](https://developers.google.com/search/docs/fundamentals/seo-starter-guide?hl=zh-cn) 和 [网站 SEO 维护指南](https://developers.google.com/search/docs/fundamentals/get-started?hl=zh-cn)。它是一套可执行检查清单，不是排名保证。
+
+一次 `geo_workflow` 会组合四个维度：
+
+1. **来源证据：** 页面或 Markdown 笔记的主题、意图、事实、标题、链接和来源链路。
+2. **沉淀知识库：** `defaultRoot` 中相关笔记的标题、小标题、实体、主查询和受限长度的本地摘录；这些内容留在本地。
+3. **关键词信号：** 用户种子词、来源信号，以及公开 URL 可匿名搜索时得到的搜索结果标题/摘要定性信号。
+4. **SEO 规范：** 内容、抓取/索引、搜索结果呈现、链接、媒体和监控检查。
+
+返回结果中的 `productionPlan.contentInputs` 会在写作前明确列出这四类输入。Harness 模型据此生产 Markdown 草稿，再通过 `geo_preview_content` 和 `geo_apply_content` 完成可审阅的写回闭环。
+
+如果来源无法证明部署级事实，插件会明确返回 `unknown`，不会把本地 Markdown 当成已上线网页。插件不能替代 Search Console、PageSpeed、完整公开站点爬虫或付费关键词工具；Sitemap 覆盖、收录状态、查询/点击、核心网页指标和服务器级 robots 行为，需要发布后用对应外部工具验证。
 
 ## 工具
 
@@ -27,7 +44,7 @@
 | `geo_audit_note` | 审计单个 Markdown 笔记 |
 | `geo_audit_vault` | 扫描整个知识库 |
 | `geo_project_report` | 生成结构化项目报告 |
-| `geo_workflow` | 从 URL/快照完成诊断、关键词规划和内容生产规划 |
+| `geo_workflow` | 从 URL/快照完成 Google 标准检查、私有知识库关键词规划和内容生产规划 |
 | `geo_content_brief` | 生成内容 Brief |
 | `geo_source_check` | 检查引用和来源可信度 |
 | `geo_preview_content` | 预览完整 Markdown 替换 |
@@ -231,6 +248,7 @@ dsh plugin --profile default add ./dsh-geo
 - 公开 `http(s)` URL 通过 Harness `ctx.web` 匿名读取。
 - 需要 JavaScript 渲染的公开页面，先保存/导出为 Markdown 或 HTML 再分析。
 - 私有账号主页通过本地 Markdown/HTML 快照支持；浏览器 Cookie 和平台凭据不会进入插件。
+- `geo_workflow` 默认会在 `defaultRoot` 中查找相关笔记，把本地标题、小标题、实体、主查询和受限长度摘录作为上下文；这些上下文不会发送到公开搜索。如需只分析当前来源，可指定 `useKnowledgeBase=false`。
 - 本地 Markdown/HTML 默认不会把提取出的词发送到公开搜索；关键词计划会标为 `seed-only`，除非用户自行提供外部关键词数据。
 - 搜索结果只提供定性主题信号。搜索量、排名难度和流量需要独立数据源，插件不会自行编造。
 
@@ -258,6 +276,10 @@ dsh plugin --profile default add ./dsh-geo
 
 ```text
 请对 https://example.com 执行完整流程，使用“产品教育”作为种子关键词，生成内容草稿计划，不要写入任何文件。
+```
+
+```text
+请对 https://example.com 执行 geo_workflow。使用当前配置知识库中的相关笔记作为私有上下文，把来源证据、Google 标准警告和关键词地图合并到内容生产输入中。不要写入文件。
 ```
 
 如果只想分析一个维度，可以指定 `focus=seo`、`focus=geo` 或 `focus=aeo`。
