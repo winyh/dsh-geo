@@ -74,7 +74,128 @@ Publish this directory as a public repository and add the repository topic `dsh-
 
 ## Usage
 
-### 1. Configure and start Harness
+You do not need to memorize tool names. Describe the goal, source and desired output in natural language; the examples below are copy-and-paste starting points.
+
+### Start here: a five-minute first run
+
+You need only:
+
+1. DeepSeek Harness installed and available as the `dsh` command.
+2. One input: a public URL, an exported Markdown/HTML page, or a Markdown knowledge-base root.
+3. A goal and audience if you want recommendations tailored to a business outcome.
+
+Follow this first-run sequence:
+
+1. Install the plugin.
+2. Set `defaultRoot` in the `dsh-geo` Bundle configuration. It is the only directory the plugin can read or write.
+3. Start or restart Harness with `dsh web`.
+4. Ask for a readiness check.
+5. Run `geo_workflow` on one page and keep the first run read-only.
+
+Minimal Bundle configuration:
+
+```yaml
+defaultRoot: "<your-knowledge-base-root>"
+```
+
+If you do not have a knowledge base yet, use a public URL first. For a private page, export it as Markdown or HTML and put that file under `defaultRoot`; no platform login is needed by this plugin.
+
+### Choose the right entry point
+
+| What you have | Start with | What to ask for |
+|---|---|---|
+| Public website or public account URL | `geo_workflow` | Full SEO/GEO/AEO diagnosis and production plan |
+| JavaScript-rendered or private page | Export Markdown/HTML, then `geo_workflow` | Analyze the local snapshot without uploading its terms |
+| One existing Markdown note | `geo_audit_note` or `geo_workflow` | Find evidence-backed issues and the top actions |
+| A whole Markdown knowledge base | `geo_audit_vault` or `geo_project_report` | Find governance gaps and prioritize files |
+| A planned article or rewrite | `geo_content_brief` | Turn a topic into intent, outline, questions and source gaps |
+| A proposed content change | `geo_preview_content` first | Review the diff, then explicitly apply it |
+
+### The complete operating method
+
+Use this order for a professional SEO/GEO/AEO job:
+
+0. Define the business goal, target audience, language/region and desired next action.
+1. Connect the source: public URL, exported snapshot or local Markdown.
+2. Establish a baseline: inspect SEO, GEO, AEO, provenance, freshness and internal links.
+3. Build a keyword and intent map: assign one primary query, supporting topics, question terms and entities to page sections.
+4. Create the content brief and information architecture: direct answer, outline, FAQs, sources and next action.
+5. Produce or revise content while preserving factual claims and source context.
+6. Verify structure, citations, links, answerability and unknown data.
+7. Preview the Markdown diff, explicitly confirm, apply the guarded write, and re-audit the current file.
+
+The plugin does not invent search volume, ranking difficulty or traffic. Treat `qualitative` as topic signals from public search and `seed-only` as a privacy-preserving plan based on the supplied source and seed terms.
+
+### Understand the result
+
+`geo_workflow` returns a single structured result. Read it in this order:
+
+| Field | Meaning | What to do next |
+|---|---|---|
+| `sourceType` | `public-url`, `local-markdown` or `private-snapshot` | Confirm the source was interpreted correctly |
+| `status` | Whether the workflow completed | If not `success`, fix the access or input issue first |
+| `audit` | SEO/GEO/AEO scores, evidence and findings | Start with high-impact findings supported by evidence |
+| `keywordPlan` | Primary, secondary, question and entity terms | Map each term to one useful section; do not stuff keywords |
+| `contentBrief` | Audience, intent, outline, FAQs and source gaps | Use it as the writing specification |
+| `productionPlan` | Diagnose, map keywords, draft and verify stages | Complete stages in order and record unknowns |
+| `writeback` | Read-only/preview/apply status | Preview and inspect the diff before any file change |
+
+### Copy-paste prompts
+
+First installation check:
+
+```text
+Check whether the configured dsh-geo root is readable and ready for a Markdown scan. Do not modify files.
+```
+
+Public URL, full read-only workflow:
+
+```text
+Run geo_workflow for https://example.com.
+Goal: increase qualified product-education traffic.
+Audience: first-time evaluators.
+Seed keywords: product education, product trial.
+Return the SEO/GEO/AEO diagnosis, qualitative keyword map, content brief and four-stage production plan. Do not write files.
+```
+
+Private or JavaScript-rendered page exported locally:
+
+```text
+Run geo_workflow for snapshots/account-home.html.
+Treat this as a private-page snapshot. Goal: make the profile easier to discover, understand and cite.
+Audience: potential customers. Return the diagnosis, keyword map, brief and verification checklist. Do not write files.
+```
+
+Existing note:
+
+```text
+Audit notes/launch.md for SEO, GEO and AEO. Show the score, evidence, unknowns and the five highest-impact actions. Do not edit the file.
+```
+
+Whole knowledge base:
+
+```text
+Scan the configured knowledge base. Prioritize missing sources, stale notes, orphan notes, broken or ambiguous links, duplicate titles and the ten lowest overall scores. Do not modify files.
+```
+
+Create a content plan:
+
+```text
+Create a content brief for notes/product.md.
+Goal: help first-time evaluators decide whether to try the product.
+Audience: non-technical buyers.
+Include one primary query, supporting topics, question terms, entities, a direct answer, outline, FAQs, source gaps and a next action.
+```
+
+Preview and apply safely:
+
+```text
+Audit notes/launch.md, fix only the three highest-impact evidence-backed issues, preserve factual claims and useful internal links, then show a complete Markdown diff. Do not write until I explicitly confirm.
+```
+
+For a new draft, add `createIfMissing=true` to the preview request and choose a new `.md` path inside `defaultRoot`. After reviewing the diff, explicitly ask to apply that preview. After writing, run the audit again and compare the result with the original findings.
+
+### Installation details and local development
 
 Set the knowledge-base root in the Bundle configuration, then start DeepSeek Harness:
 
@@ -90,7 +211,7 @@ pnpm run build
 dsh plugin --profile default add ./dsh-geo
 ```
 
-### 2. Ask with natural language
+### Detailed request patterns
 
 The recommended entry point for a real SEO project is `geo_workflow`. It keeps diagnosis, keyword adjustment and content production in one result instead of making you guess which tool to call next.
 
@@ -142,7 +263,7 @@ Run the complete workflow for https://example.com, use "product education" as th
 
 Use `focus=seo`, `focus=geo` or `focus=aeo` when you only want one assessment pillar.
 
-### 3. Preview before writing
+### Writeback safety
 
 Content changes are preview-only by default. A reliable first-use loop is:
 
@@ -159,6 +280,21 @@ For a practical first request, use:
 ```text
 Check the configured root, audit notes/launch.md, fix only the three highest-impact issues, show a diff, and wait for my approval before writing anything.
 ```
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| The plugin or tools are not recognized | Harness loaded an older bundle | Reinstall the plugin from the same source and restart `dsh web` |
+| `geo_setup_check` cannot read the root | `defaultRoot` is missing, wrong or outside the allowed workspace | Correct the Bundle config, then restart Harness |
+| A public page is empty or incomplete | The page needs JavaScript, login or a blocked request | Export the visible page as Markdown/HTML and analyze the local snapshot |
+| A private URL cannot be fetched directly | The plugin intentionally does not use browser cookies or credentials | Save/export the page under `defaultRoot` and pass the local path |
+| `keywordPlan.dataQuality` is `seed-only` | The source is local, so extracted terms were not sent to public search | Provide your own seed terms or separate external keyword data; this status is expected for private content |
+| A write is refused after preview | The file changed after the preview or the token/path no longer matches | Read the current file, create a new preview and review the new diff |
+| The result says HTTP non-2xx or source unavailable | The URL is unavailable to anonymous access | Check the URL or use an exported snapshot |
+| A file is too large or the scan is capped | `maxTextChars`, `maxFileBytes` or `maxFiles` was reached | Split the source or raise the relevant limit deliberately |
+
+After changing the source code, rebuild and reinstall the same local source so Harness loads the new bundle. If a command is not recognized in your Harness release, run `dsh plugin --help`; the plugin does not change other Harness profiles or repositories.
 
 ## Configure
 

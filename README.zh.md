@@ -73,7 +73,128 @@ dsh plugin --profile default add github:winyh/dsh-geo
 
 ## 使用方法
 
-### 1. 配置并启动 Harness
+不需要记住工具名称。直接用自然语言说明“分析什么、目标是什么、希望得到什么结果”即可；下面的请求都可以直接复制使用。
+
+### 从零开始：5 分钟完成第一次使用
+
+你只需要准备：
+
+1. 已安装 DeepSeek Harness，并且可以运行 `dsh` 命令。
+2. 一种输入：公开 URL、导出的 Markdown/HTML 页面，或现有 Markdown 知识库。
+3. 可选的业务目标和目标受众；填写后建议会更贴近实际业务。
+
+第一次使用按这个顺序操作：
+
+1. 安装插件。
+2. 在 `dsh-geo` Bundle 配置中设置 `defaultRoot`，这是插件允许读写的唯一目录。
+3. 执行 `dsh web` 启动或重启 Harness。
+4. 先发送“检查根目录”的请求。
+5. 对一篇内容运行 `geo_workflow`，第一次保持只读，不要直接写文件。
+
+最小配置如下：
+
+```yaml
+defaultRoot: "<your-knowledge-base-root>"
+```
+
+如果还没有知识库，可以先分析公开 URL。若要分析私有页面，请先把页面导出为 Markdown 或 HTML，放到 `defaultRoot` 内；插件不需要平台登录，也不会读取浏览器 Cookie。
+
+### 先判断：你应该从哪里开始
+
+| 你手里有什么 | 推荐入口 | 你可以怎么说 |
+|---|---|---|
+| 公开网站或公开账号主页 URL | `geo_workflow` | 做完整 SEO/GEO/AEO 诊断和内容生产规划 |
+| 需要登录或依赖 JavaScript 的页面 | 导出 Markdown/HTML，再用 `geo_workflow` | 分析本地快照，不上传快照中的词 |
+| 一篇已有 Markdown 笔记 | `geo_audit_note` 或 `geo_workflow` | 找出有证据的问题和最高优先级行动 |
+| 整个 Markdown 知识库 | `geo_audit_vault` 或 `geo_project_report` | 找治理缺口并排出优先处理文件 |
+| 还没有成稿，只有主题或旧内容 | `geo_content_brief` | 生成意图、结构、问题和来源缺口 |
+| 已经有一版修改方案 | 先用 `geo_preview_content` | 先审阅 diff，再明确要求写回 |
+
+### 完整 SEO/GEO/AEO 执行流程
+
+专业项目建议按下面顺序执行，不要一上来就改文章：
+
+0. 明确业务目标、目标受众、语言/地区和页面希望用户完成的下一步动作。
+1. 接入来源：公开 URL、导出快照或本地 Markdown。
+2. 做基线诊断：检查 SEO、GEO、AEO、来源、更新时间、内部链接和知识结构。
+3. 建立关键词与意图地图：确定一个主查询，再把次级主题、问题词和实体分配到具体章节。
+4. 生成内容 Brief 和信息架构：直接答案、大纲、FAQ、来源缺口和下一步行动。
+5. 生产或重写内容：保留事实、来源和有价值的内部链接。
+6. 验证结构、引用、链接、可回答性和仍未确认的未知项。
+7. 预览 Markdown diff，明确确认后安全写回，再重新审计当前文件。
+
+插件不会编造搜索量、排名难度或流量。`qualitative` 表示公开搜索提供了定性主题信号；`seed-only` 表示基于本地来源和种子词完成规划，同时为了隐私没有把本地内容词发送到公开搜索。
+
+### 如何读懂结果
+
+`geo_workflow` 会把来源、诊断、关键词、Brief、生产计划和写回状态放在一个结果里。建议按下面顺序阅读：
+
+| 字段 | 含义 | 下一步 |
+|---|---|---|
+| `sourceType` | `public-url`、`local-markdown` 或 `private-snapshot` | 确认插件识别的来源类型正确 |
+| `status` | 流程是否完成 | 不是 `success` 时，先处理访问或输入问题 |
+| `audit` | SEO/GEO/AEO 分数、证据和发现项 | 先处理有证据支持且影响最大的发现 |
+| `keywordPlan` | 主查询、次级主题、问题词和实体 | 把词分配到有用章节，不要机械堆词 |
+| `contentBrief` | 受众、意图、大纲、FAQ 和来源缺口 | 把它当作写作规格，而不是直接发布的成稿 |
+| `productionPlan` | 诊断、关键词映射、写作、验证四阶段 | 按顺序执行，并记录未知项 |
+| `writeback` | 只读、预览或写回状态 | 任何改动都先看 diff |
+
+### 可直接复制的请求
+
+首次安装检查：
+
+```text
+检查当前 dsh-geo 根目录是否可读取、是否可以开始 Markdown 扫描。不要修改文件。
+```
+
+公开 URL 的完整只读流程：
+
+```text
+请对 https://example.com 执行 geo_workflow。
+目标：提升产品教育类的有效访问。
+受众：第一次评估产品的人。
+种子关键词：产品教育、产品试用。
+返回 SEO/GEO/AEO 诊断、定性关键词地图、内容 Brief 和四阶段生产计划。不要写入文件。
+```
+
+私有或需要 JavaScript 的页面导出后分析：
+
+```text
+请对 snapshots/account-home.html 执行 geo_workflow。
+这是私有账号主页的本地快照。目标：让主页更容易被发现、理解和引用。
+受众：潜在客户。返回诊断、关键词地图、内容 Brief 和验证清单。不要写入文件。
+```
+
+审计已有笔记：
+
+```text
+请审计 notes/launch.md 的 SEO、GEO 和 AEO。给出分数、证据、未知项和影响最大的五项行动。不要编辑文件。
+```
+
+扫描整个知识库：
+
+```text
+扫描当前知识库，优先列出来源缺失、内容过期、孤立笔记、断链或歧义链接、重复标题，以及综合分数最低的十个文件。不要修改文件。
+```
+
+生成内容规划：
+
+```text
+请为 notes/product.md 生成内容 Brief。
+目标：帮助第一次评估产品的人判断是否值得试用。
+受众：非技术决策者。
+请包含一个主查询、次级主题、问题词、实体、直接答案、大纲、FAQ、来源缺口和下一步行动。
+```
+
+预览并安全优化：
+
+```text
+请审计 notes/launch.md，只修复三个影响最大且有证据支持的问题，保留事实、来源和有价值的内部链接，然后展示完整 Markdown diff。未经我明确确认不要写入。
+```
+
+如果要创建新稿，在预览请求中使用 `createIfMissing=true`，并选择 `defaultRoot` 内新的 `.md` 路径。检查 diff 后，再明确要求应用该预览；写入完成后重新审计，并与原始发现项对比。
+
+### 配置并启动 Harness
 
 先在 Bundle 配置中设置知识库根目录，再启动 DeepSeek Harness：
 
@@ -89,7 +210,7 @@ pnpm run build
 dsh plugin --profile default add ./dsh-geo
 ```
 
-### 2. 使用自然语言调用
+### 详细请求方式
 
 真实 SEO 项目建议优先使用 `geo_workflow`。它会在一次结果中完成诊断、关键词调整、内容 Brief 和生产验证计划，减少用户猜测工具调用顺序的成本。
 
@@ -141,7 +262,7 @@ dsh plugin --profile default add ./dsh-geo
 
 如果只想分析一个维度，可以指定 `focus=seo`、`focus=geo` 或 `focus=aeo`。
 
-### 3. 写入前先预览
+### 写回安全规则
 
 内容修改默认只预览。第一次使用建议按下面的最短闭环操作：
 
@@ -158,6 +279,21 @@ dsh plugin --profile default add ./dsh-geo
 ```text
 先检查当前根目录，审计 notes/launch.md，只修复影响最大的三个问题，展示 diff，未经我批准不要写入。
 ```
+
+### 常见问题排查
+
+| 现象 | 常见原因 | 处理方式 |
+|---|---|---|
+| 找不到插件或工具 | Harness 仍加载旧 Bundle | 用相同来源重新安装插件，并重启 `dsh web` |
+| `geo_setup_check` 无法读取根目录 | `defaultRoot` 缺失、错误或不在允许范围内 | 修改 Bundle 配置后重启 Harness |
+| 公开页面内容为空或不完整 | 页面依赖 JavaScript、登录或匿名请求被拦截 | 将可见页面导出为 Markdown/HTML，再分析本地快照 |
+| 私有 URL 无法直接抓取 | 插件刻意不使用浏览器 Cookie 或账号凭据 | 将页面保存/导出到 `defaultRoot`，传入本地路径 |
+| `keywordPlan.dataQuality` 是 `seed-only` | 来源是本地文件，提取出的词没有发送到公开搜索 | 补充自己的种子词或独立关键词数据；私有内容出现此状态是正常的 |
+| 预览后写回被拒绝 | 预览后文件发生变化，或令牌/路径不再匹配 | 重新读取当前文件、重新预览并检查新的 diff |
+| 结果显示 HTTP non-2xx 或 source unavailable | 匿名访问无法获得该 URL | 检查 URL，或改用导出快照 |
+| 文件过大或扫描数量受限 | 达到 `maxTextChars`、`maxFileBytes` 或 `maxFiles` | 拆分来源，或有意识地提高对应限制 |
+
+修改插件源码后，要重新构建并从相同本地目录安装，Harness 才会加载新 Bundle。如果当前 Harness 版本的命令提示不一致，可运行 `dsh plugin --help` 查询；插件不会修改其他 profile 或其他仓库。
 
 ## 常用命令示例
 
