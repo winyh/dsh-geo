@@ -8,7 +8,7 @@ import { createContentBrief, auditNote } from './audit.js'
 import { readNote } from './vault.js'
 import { scanVault, summarizeVault } from './vault.js'
 import { fetchPublicDocument, isPublicUrl, readLocalDocument, type SourceDocument } from './web.js'
-import { buildKeywordPlan, buildProductionPlan } from './workflow.js'
+import { buildKeywordPlan, buildProductionPlan, buildSeoSop } from './workflow.js'
 import type { ContentBrief, FileSystemLike, GeoConfig, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
 
 type AuditFocus = Pillar | 'all'
@@ -432,6 +432,39 @@ const productionPlanSchema = {
   },
 } as const
 
+const sopSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string', required: true },
+    version: { type: 'string', required: true },
+    mode: { type: 'string', enum: ['read-only'], required: true },
+    currentStep: { type: 'string', enum: ['define-goal', 'connect-source', 'baseline-audit', 'keyword-map', 'content-brief', 'draft', 'verify', 'preview-writeback', 're-audit'], required: true },
+    steps: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', enum: ['define-goal', 'connect-source', 'baseline-audit', 'keyword-map', 'content-brief', 'draft', 'verify', 'preview-writeback', 're-audit'], required: true },
+          order: { type: 'number', required: true },
+          title: { type: 'string', required: true },
+          status: { type: 'string', enum: ['completed', 'ready', 'blocked'], required: true },
+          objective: { type: 'string', required: true },
+          inputs: { type: 'array', items: { type: 'string' }, required: true },
+          outputs: { type: 'array', items: { type: 'string' }, required: true },
+          completionCriteria: { type: 'array', items: { type: 'string' }, required: true },
+          nextAction: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    completionCriteria: { type: 'array', items: { type: 'string' }, required: true },
+    limitations: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
 const workflowOutputSchema = {
   type: 'object',
   additionalProperties: false,
@@ -492,6 +525,7 @@ const workflowOutputSchema = {
       required: true,
     },
     audit: auditOutputSchema,
+    sop: sopSchema,
     keywordPlan: keywordPlanSchema,
     contentBrief: briefOutputSchema,
     productionPlan: productionPlanSchema,
@@ -851,6 +885,18 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         args.audience,
       )
       const productionPlan = buildProductionPlan(contentBrief, audit, keywordPlan)
+      const sop = buildSeoSop({
+        source,
+        sourceType: document.sourceType,
+        sourceTruncated: document.truncated,
+        goal: args.goal,
+        audience: args.audience,
+        knowledgeBaseEnabled: knowledgeEnabled,
+        knowledgeBaseIssues: knowledgeErrors,
+        audit,
+        keywordPlan,
+        brief: contentBrief,
+      })
       const localFile = document.sourceType !== 'public-url'
       return {
         source,
@@ -880,6 +926,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
           privacy: 'Knowledge-base context stays inside the Harness filesystem. Its titles, headings, entities, queries and bounded excerpts are not sent to public search; only explicit user seedKeywords may be used for URL search signals.',
         },
         audit,
+        sop,
         keywordPlan,
         contentBrief,
         productionPlan,

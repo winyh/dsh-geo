@@ -1,5 +1,5 @@
 import type { WebRuntime, WebSearchResult } from '@deepseek-ai/dsh-web'
-import type { AuditResult, ContentBrief, KeywordCandidate, KeywordIntent, KeywordPlan, KnowledgeSignal, NoteSnapshot, ProductionPlan, SeoStandardReport } from './types.js'
+import type { AuditResult, ContentBrief, KeywordCandidate, KeywordIntent, KeywordPlan, KnowledgeSignal, NoteSnapshot, ProductionPlan, SeoSop, SeoStandardReport, SourceType } from './types.js'
 
 interface SearchLike {
   search(request: { query: string; maxResults?: number }, signal?: AbortSignal): Promise<WebSearchResult>
@@ -240,6 +240,150 @@ export function buildProductionPlan(brief: ContentBrief, audit: AuditResult, key
       'For an existing Markdown note, call geo_preview_content with the complete replacement.',
       'For a new note, set createIfMissing=true and preview the destination path inside defaultRoot.',
       'After reviewing the diff, call geo_apply_content with path and previewToken; the token binds the exact content.',
+    ],
+  }
+}
+
+export function buildSeoSop(input: {
+  source: string
+  sourceType: SourceType
+  sourceTruncated: boolean
+  goal?: string
+  audience?: string
+  knowledgeBaseEnabled: boolean
+  knowledgeBaseIssues?: string[]
+  audit: AuditResult
+  keywordPlan: KeywordPlan
+  brief: ContentBrief
+}): SeoSop {
+  const effectiveGoal = input.goal || input.brief.intent
+  const effectiveAudience = input.audience || input.brief.audience
+  const currentStep = input.sourceTruncated
+    ? 'connect-source'
+    : input.keywordPlan.status === 'partial' || (input.knowledgeBaseIssues?.length || 0) > 0
+      ? 'keyword-map'
+      : 'draft'
+  return {
+    name: '标准 SEO/GEO/AEO 内容生产 SOP',
+    version: '0.2.0',
+    mode: 'read-only',
+    currentStep,
+    steps: [
+      {
+        id: 'define-goal',
+        order: 1,
+        title: '明确目标和受众',
+        status: 'completed',
+        objective: '把业务目标、受众和页面动作写成可检查的内容任务。',
+        inputs: [`目标：${effectiveGoal}`, `受众：${effectiveAudience}`],
+        outputs: ['目标卡：目标、受众、主题意图和下一步动作。'],
+        completionCriteria: ['目标和受众已经记录；未提供时使用了可见的默认推断。'],
+        nextAction: '确认目标和受众是否正确；若不正确，重新运行 geo_workflow 并补充 goal/audience。',
+      },
+      {
+        id: 'connect-source',
+        order: 2,
+        title: '接入并确认来源',
+        status: input.sourceTruncated ? 'ready' : 'completed',
+        objective: '确认来源类型、访问方式、最终 URL、HTTP 状态和内容是否完整。',
+        inputs: [`来源：${input.source}`, `来源类型：${input.sourceType}`],
+        outputs: ['来源快照、访问限制、截断状态和隐私边界。'],
+        completionCriteria: ['来源可读取；公开 URL 为 2xx/3xx；本地文件位于 defaultRoot；没有未解释的截断。'],
+        nextAction: input.sourceTruncated
+          ? '来源超过读取上限；导出更聚焦的 Markdown/HTML 快照或拆分内容后重新运行。'
+          : '进入基线诊断。',
+      },
+      {
+        id: 'baseline-audit',
+        order: 3,
+        title: '建立 SEO/GEO/AEO 基线',
+        status: 'completed',
+        objective: '先看证据、标准检查和 unknown，再决定改什么。',
+        inputs: ['来源正文和元数据', 'Google 标准 SEO 检查清单'],
+        outputs: [`SEO/GEO/AEO 分数：${input.audit.scores.seo}/${input.audit.scores.geo}/${input.audit.scores.aeo}`, `Google 标准：${input.audit.seoStandard.summary.pass} pass、${input.audit.seoStandard.summary.warn} warn、${input.audit.seoStandard.summary.unknown} unknown`, ...input.audit.topActions.slice(0, 3)],
+        completionCriteria: ['高影响发现有证据；部署级事实没有被 unknown 冒充为已验证。'],
+        nextAction: '只选择影响最大且有证据支持的 1-3 个问题进入关键词与内容规划。',
+      },
+      {
+        id: 'keyword-map',
+        order: 4,
+        title: '建立关键词和意图地图',
+        status: input.keywordPlan.status === 'partial' || (input.knowledgeBaseIssues?.length || 0) > 0 ? 'ready' : 'completed',
+        objective: '让关键词服务页面结构，而不是生成孤立的词表。',
+        inputs: ['来源主题和 frontmatter', input.knowledgeBaseEnabled ? 'defaultRoot 相关笔记和受限本地摘录' : '未启用本地知识库', '公开搜索定性信号（如适用）', 'Google 标准警告'],
+        outputs: [`主查询：${input.keywordPlan.primaryKeyword || '未确定'}`, `候选词：${input.keywordPlan.candidates.length} 个`, `数据质量：${input.keywordPlan.dataQuality}`, `相关知识库笔记：${input.keywordPlan.knowledgeSignals.length} 篇`],
+        completionCriteria: ['一个主查询已确定；次级主题、问题词和实体已分配到具体章节；搜索量缺失被明确标记。'],
+        nextAction: input.keywordPlan.status === 'partial' || (input.knowledgeBaseIssues?.length || 0) > 0
+          ? '检查公开搜索或知识库读取问题；在不影响隐私的前提下补充外部关键词数据或继续使用 seed-only。'
+          : '进入内容 Brief 和信息架构。',
+      },
+      {
+        id: 'content-brief',
+        order: 5,
+        title: '生成内容 Brief 和信息架构',
+        status: 'completed',
+        objective: '把来源、知识库、SEO 规范和关键词地图合并成写作规格。',
+        inputs: ['source', 'knowledgeBase', 'seoStandard', 'keywordMap'],
+        outputs: [`推荐标题：${input.brief.recommendedTitle}`, `章节数：${input.brief.outline.length}`, `问题数：${input.brief.questions.length}`, `来源缺口：${input.brief.sourceGaps.length}`],
+        completionCriteria: ['有直接答案、受众、意图、大纲、问题、来源缺口和下一步动作。'],
+        nextAction: '使用 productionPlan.contentInputs 和 draftContract 生成 Markdown 草稿。',
+      },
+      {
+        id: 'draft',
+        order: 6,
+        title: '按输入契约生产内容',
+        status: 'ready',
+        objective: '生成有用、可读、可引用且保留事实边界的 Markdown。',
+        inputs: ['productionPlan.contentInputs', 'productionPlan.draftContract', '原始来源和相关知识库摘录'],
+        outputs: ['完整 Markdown 草稿：标题、直接答案、分层正文、FAQ、来源和下一步。'],
+        completionCriteria: ['草稿覆盖主查询和用户任务；事实有来源；没有虚构搜索量、排名、引用或客户结果。'],
+        nextAction: '让 Harness 生成草稿，但不要直接覆盖原文件；先进入验证和预览。',
+      },
+      {
+        id: 'verify',
+        order: 7,
+        title: '验证内容和部署边界',
+        status: 'ready',
+        objective: '确认优化没有损坏事实、来源、链接和知识结构。',
+        inputs: ['草稿', 'seoStandard', '基线审计'],
+        outputs: ['重新审计结果、来源检查结果、剩余 unknown 和差异说明。'],
+        completionCriteria: ['高影响问题有改善证据；关键来源存在；新增事实有日期/边界；unknown 仍被保留。'],
+        nextAction: '运行 geo_audit_note 和 geo_source_check，再请求完整 Markdown diff。',
+      },
+      {
+        id: 'preview-writeback',
+        order: 8,
+        title: '预览并安全写回',
+        status: 'ready',
+        objective: '让每次修改可审阅、可回退且不会覆盖并发更新。',
+        inputs: ['目标 Markdown 路径', '完整草稿'],
+        outputs: ['diff、旧/新哈希、previewToken 和版本保护结果。'],
+        completionCriteria: ['用户检查 diff；目标在 defaultRoot 内；写回使用有效 previewToken。'],
+        nextAction: '明确确认后调用 geo_apply_content；若文件变化，重新预览，不强行写入。',
+      },
+      {
+        id: 're-audit',
+        order: 9,
+        title: '写回后复查和迭代',
+        status: 'ready',
+        objective: '用同一套标准比较优化前后，而不是凭感觉结束任务。',
+        inputs: ['写回后的当前文件', '原始基线审计'],
+        outputs: ['前后分数、发现项变化、来源变化、剩余工作清单。'],
+        completionCriteria: ['高优先级问题有明确结果；未完成项有下一次迭代动作。'],
+        nextAction: '使用 Search Console、PageSpeed 或站点分析补充插件无法证明的部署级数据。',
+      },
+    ],
+    completionCriteria: [
+      '目标、受众和页面动作明确。',
+      '来源类型、访问限制、截断和隐私边界明确。',
+      '主查询、关键词地图、内容 Brief 和四类生产输入齐全。',
+      '草稿通过 SEO/GEO/AEO、来源和结构复查。',
+      '写回前检查 diff，写回后重新审计。',
+      'Sitemap、Search Console、Core Web Vitals、真实收录和流量等外部数据另行验证。',
+    ],
+    limitations: [
+      '当前结果是只读 SOP 和生产契约；插件不会在没有 Harness 模型参与的情况下自行生成事实性文章。',
+      '搜索量、排名难度、收录、点击和转化不由插件编造，必须使用独立数据源。',
     ],
   }
 }

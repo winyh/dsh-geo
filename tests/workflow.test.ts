@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { auditNote, createContentBrief } from '../src/audit.js'
 import { parseNote } from '../src/markdown.js'
-import { buildKeywordPlan, buildProductionPlan } from '../src/workflow.js'
+import { buildKeywordPlan, buildProductionPlan, buildSeoSop } from '../src/workflow.js'
 
 describe('complete content workflow', () => {
   it('keeps keyword recommendations honest when no search provider exists', async () => {
@@ -56,5 +56,26 @@ describe('complete content workflow', () => {
     expect(production.contentInputs.knowledgeBase[0]).toContain('local excerpt')
     expect(production.contentInputs.source[0]).toContain('product.md')
     expect(production.contentInputs.seoStandard.length).toBeGreaterThan(0)
+  })
+
+  it('returns an ordered SOP with explicit completion criteria and next actions', async () => {
+    const note = parseNote('product.md', '# Knowledge base\n\nA knowledge base is a structured source of answers for product teams.\n')
+    const audit = auditNote(note)
+    const keywordPlan = await buildKeywordPlan(note, audit, undefined, ['knowledge base'])
+    const brief = createContentBrief(note, audit)
+    const sop = buildSeoSop({
+      source: note.path,
+      sourceType: 'local-markdown',
+      sourceTruncated: false,
+      knowledgeBaseEnabled: true,
+      audit,
+      keywordPlan,
+      brief,
+    })
+    expect(sop.steps).toHaveLength(9)
+    expect(sop.steps.map((step) => step.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    expect(sop.currentStep).toBe('draft')
+    expect(sop.steps.find((step) => step.id === 'draft')?.status).toBe('ready')
+    expect(sop.steps.every((step) => step.completionCriteria.length > 0 && step.nextAction.length > 0)).toBe(true)
   })
 })

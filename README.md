@@ -143,6 +143,24 @@ Use this order for a professional SEO/GEO/AEO job:
 
 The plugin does not invent search volume, ranking difficulty or traffic. Treat `qualitative` as topic signals from public search and `seed-only` as a privacy-preserving plan based on the supplied source and seed terms.
 
+### SOP: inputs, outputs and completion criteria
+
+`geo_workflow` returns `sop`. `currentStep` tells you what to do next, while `steps` contains the full operating path:
+
+| Step | Inputs | Output | Done when |
+|---|---|---|---|
+| 1. Define goal | Goal, audience, language/region, page action | Goal card | Goal and audience are explicit, or visible defaults are accepted |
+| 2. Connect source | Public URL, exported snapshot or Markdown | Source type, access boundary, truncation state | The source is readable and private content stays local |
+| 3. Establish baseline | Source content and Google standard checks | SEO/GEO/AEO scores, evidence and unknowns | High-impact issues have evidence and unknowns are not treated as passes |
+| 4. Map keywords | Source, knowledge base, seeds and qualitative search signals | Primary query, supporting topics, questions and entities | Each term has a job in the page structure |
+| 5. Create brief | Four content-input dimensions | Title, direct answer, outline, FAQs and source gaps | The writing specification is actionable |
+| 6. Produce draft | `contentInputs` and `draftContract` | Complete Markdown draft | No facts, volume, rankings or citations are invented |
+| 7. Verify | Draft, baseline and sources | Re-audit and remaining unknowns | Key facts, sources, links and structure are intact |
+| 8. Preview/write | Destination path and full draft | Diff, hashes and `previewToken` | The diff is reviewed; changed files are previewed again |
+| 9. Re-audit | Current file after writeback | Before/after comparison and next-cycle list | High-priority issues have outcomes and remaining work has a next action |
+
+If a step is not complete, follow `sop.steps[n].nextAction` instead of jumping straight to publication.
+
 ### Understand the result
 
 `geo_workflow` returns a single structured result. Read it in this order:
@@ -150,11 +168,12 @@ The plugin does not invent search volume, ranking difficulty or traffic. Treat `
 | Field | Meaning | What to do next |
 |---|---|---|
 | `sourceType` | `public-url`, `local-markdown` or `private-snapshot` | Confirm the source was interpreted correctly |
-| `status` | Whether the workflow completed | If not `success`, fix the access or input issue first |
+| `status` | Whether the workflow completed | If `partial`, fix the access, truncation or data-quality issue first |
 | `audit` | SEO/GEO/AEO scores, evidence and findings | Start with high-impact findings supported by evidence |
 | `keywordPlan` | Primary, secondary, question and entity terms | Map each term to one useful section; do not stuff keywords |
 | `contentBrief` | Audience, intent, outline, FAQs and source gaps | Use it as the writing specification |
 | `productionPlan` | Diagnose, map keywords, draft and verify stages | Complete stages in order and record unknowns |
+| `sop` | Nine-step SOP, current step, completion criteria and next action | Follow `currentStep` and do not skip steps |
 | `writeback` | Read-only/preview/apply status | Preview and inspect the diff before any file change |
 
 ### Copy-paste prompts

@@ -219,6 +219,32 @@ export interface ProductionPlan {
   writebackInstructions: string[]
 }
 
+export type SopStepId = 'define-goal' | 'connect-source' | 'baseline-audit' | 'keyword-map' | 'content-brief' | 'draft' | 'verify' | 'preview-writeback' | 're-audit'
+
+export type SopStepStatus = 'completed' | 'ready' | 'blocked'
+
+export interface SopStep {
+  id: SopStepId
+  order: number
+  title: string
+  status: SopStepStatus
+  objective: string
+  inputs: string[]
+  outputs: string[]
+  completionCriteria: string[]
+  nextAction: string
+}
+
+export interface SeoSop {
+  name: string
+  version: string
+  mode: 'read-only'
+  currentStep: SopStepId
+  steps: SopStep[]
+  completionCriteria: string[]
+  limitations: string[]
+}
+
 export interface ScanLimits {
   maxFiles: number
   maxFileBytes: number
