@@ -1,10 +1,70 @@
-# 生成式引擎优化
+# Generative Engine Optimization
 
-> **Language / 语言:** **English** · [中文](./README.zh.md)
+> English | [中文](./README.zh.md)
 
 `dsh-geo` is a DeepSeek Harness bundle that gives the agent explainable SEO, GEO and AEO tools for Markdown knowledge bases.
 
 > Technical package ID: `dsh-geo` · DeepSeek Harness plugin for SEO, GEO and AEO
+
+## Plugin Positioning and Collaboration Navigation
+
+`dsh-geo` is the content-discoverability layer in the six-plugin system. It turns product, commercial and user language into content that search engines and AI answer engines can understand, trust and cite, with traceable evidence for reviewing impact.
+
+- **Owns:** SEO/GEO/AEO audits, keyword and intent maps, content briefs, Markdown content production/review, provenance and freshness, site discoverability, product-discovery preflight and impact reviews.
+- **Inputs:** User problems and external language from [dsh-idea](../dsh-idea/README.md), product facts from [dsh-product](../dsh-product/README.md), audience/value/conversion goals from [dsh-business](../dsh-business/README.md), and query, CTR, referral and conversion snapshots from [dsh-growth](../dsh-growth/README.md).
+- **Outputs:** SEO/GEO/AEO audits, keyword opportunities, content briefs, previewable Markdown changes, manual distribution packs and impact reviews for growth and opportunity discovery.
+- **Does not own:** Ranking or traffic guarantees, Search Console, PageSpeed, paid keyword tools, full crawling or website engineering. It does not log in, submit forms or mass-post.
+
+## Positioning Architecture: Commercial Strategy Layer + Four-Stage Core Flow
+
+The six plugins work together to turn a real demand signal into a deliverable product, reach target customers through marketing, and use monetization results to drive product iteration or discover new opportunities.
+
+```mermaid
+flowchart TB
+    S["dsh-business<br/>Commercial strategy layer<br/>Value · model · pricing · profit"]
+
+    subgraph MAIN["Four-stage core flow"]
+        direction LR
+        A["1. Demand<br/>dsh-idea"] --> B["2. Product<br/>dsh-product"]
+        B --> C["3. Marketing<br/>dsh-geo + dsh-growth"]
+        C --> D["4. Monetization execution<br/>dsh-sales"]
+    end
+
+    S -. "Sets commercial direction and guardrails" .-> A
+    D --> R["Feedback<br/>Deals · renewals · revenue · cost"]
+    R -->|Product iteration| B
+    R -->|New demand / opportunities| A
+
+    classDef strategy fill:#FFF4D6,stroke:#B7791F,color:#5C4500
+    classDef stage fill:#E8F1FF,stroke:#3366CC,color:#173A7A
+    classDef feedback fill:#E8F7EE,stroke:#2F855A,color:#1C4532
+    class S strategy
+    class A,B,C,D stage
+    class R feedback
+```
+
+This plugin owns content and discoverability in the marketing stage: it turns “what users are looking for, what the product can prove and why it should be trusted” into publishable, reviewable content assets. [dsh-business](../dsh-business/README.md) supplies value, audience and commercial boundaries; [dsh-growth](../dsh-growth/README.md) measures acquisition impact. Customer problems and content gaps found during monetization feed back to [dsh-product](../dsh-product/README.md) and [dsh-idea](../dsh-idea/README.md).
+
+## Plugin Navigation
+
+| Plugin | Clear responsibility | Direct link |
+| --- | --- | --- |
+| dsh-idea | External opportunities, demand signals, candidate directions and smallest useful tests | [README](../dsh-idea/README.md) |
+| dsh-product | Product definition, POC/MVP, release gates and PMF | [README](../dsh-product/README.md) |
+| dsh-business | Cross-cutting commercial strategy, value, pricing and profitability | [README](../dsh-business/README.md) |
+| dsh-sales | Monetization execution: qualification, deal progression, closing, expansion and renewal | [README](../dsh-sales/README.md) |
+| dsh-growth | Acquisition, activation, retention, revenue analysis and growth experiments | [README](../dsh-growth/README.md) |
+| dsh-geo | SEO/GEO/AEO, content production and search/answer-engine discoverability (this plugin) | [README](./README.md) |
+
+## Recommended Handoffs
+
+| Output from this plugin | Hand off to | Handoff question |
+| --- | --- | --- |
+| User queries, content gaps and external competitor signals | [dsh-idea](../dsh-idea/README.md) | Which new problems deserve further opportunity research? |
+| Product facts, capability boundaries and user-problem content | [dsh-product](../dsh-product/README.md) | Does the product need better information, experience or evidence? |
+| Value propositions, audience, pricing and conversion goals | [dsh-business](../dsh-business/README.md) | Which commercial information belongs in packaging, offers or the business plan? |
+| High-intent pages, referrals and conversion snapshots | [dsh-growth](../dsh-growth/README.md) | Which content or channel experiments create measurable growth? |
+| Customer objections, sales questions and case-study material | [dsh-sales](../dsh-sales/README.md) | Which content can reduce sales education and closing cost? |
 
 ## What it does
 

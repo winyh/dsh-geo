@@ -1,8 +1,51 @@
 # 生成式引擎优化
 
-> **语言 / Language:** **中文** · [English](./README.md)
+> 中文 | [English](./README.md)
 
 `dsh-geo` 是“生成式引擎优化” DeepSeek Harness Bundle，为 Markdown 知识库提供可解释的 SEO、GEO 和 AEO 工具。
+
+## 插件定位：营销阶段的内容与可发现性层
+
+`dsh-geo` 负责营销阶段的内容、SEO/GEO/AEO 和搜索/答案引擎可发现性：把产品事实、商业价值和用户语言转成可被目标用户理解、信任和引用的内容资产。
+
+`dsh-business` 提供价值、受众和商业边界，`dsh-growth` 衡量获客效果；变现过程中出现的客户问题和内容缺口，会反馈给 `dsh-product` 和 `dsh-idea`。
+
+## 定位架构：商业策略层 + 四段主链路
+
+```mermaid
+flowchart TB
+    S["dsh-business<br/>商业策略层<br/>价值 · 模式 · 定价 · 利润"]
+
+    subgraph MAIN["四段主链路"]
+        direction LR
+        A["1. 需求<br/>dsh-idea"] --> B["2. 产品<br/>dsh-product"]
+        B --> C["3. 营销<br/>dsh-geo + dsh-growth"]
+        C --> D["4. 变现执行<br/>dsh-sales"]
+    end
+
+    S -. "定义商业方向与边界" .-> A
+    D --> R["反馈<br/>成交 · 续费 · 收入 · 成本"]
+    R -->|产品迭代| B
+    R -->|新需求 / 新机会| A
+
+    classDef strategy fill:#FFF4D6,stroke:#B7791F,color:#5C4500
+    classDef stage fill:#E8F1FF,stroke:#3366CC,color:#173A7A
+    classDef feedback fill:#E8F7EE,stroke:#2F855A,color:#1C4532
+    class S strategy
+    class A,B,C,D stage
+    class R feedback
+```
+
+## 插件导航
+
+| 插件 | 分工 | 直接跳转 |
+|---|---|---|
+| `dsh-idea` | 外部机会、需求信号、候选方案和最小验证 | [README](../dsh-idea/README.zh.md) |
+| `dsh-product` | 产品定义、POC/MVP、发布门槛和 PMF | [README](../dsh-product/README.zh.md) |
+| `dsh-business` | 横跨全链路的商业策略、价值、定价和盈利 | [README](../dsh-business/README.zh.md) |
+| `dsh-sales` | 变现执行：资格判断、商机推进、成交、扩单和续约 | [README](../dsh-sales/README.zh.md) |
+| `dsh-growth` | 获客、激活、留存、收入分析和增长实验 | [README](../dsh-growth/README.zh.md) |
+| `dsh-geo` | SEO/GEO/AEO、内容生产和搜索/答案引擎可发现性 | [README](./README.zh.md) |
 
 ## 功能
 
