@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { auditNote, createContentBrief } from '../src/audit.js'
+import { buildKeywordOpportunityMap } from '../src/keywords.js'
 import { parseNote } from '../src/markdown.js'
 import { buildKeywordPlan, buildProductionPlan, buildSeoSop } from '../src/workflow.js'
 
@@ -77,5 +78,15 @@ describe('complete content workflow', () => {
     expect(sop.currentStep).toBe('draft')
     expect(sop.steps.find((step) => step.id === 'draft')?.status).toBe('ready')
     expect(sop.steps.every((step) => step.completionCriteria.length > 0 && step.nextAction.length > 0)).toBe(true)
+  })
+
+  it('carries imported opportunity clusters into the production input contract', async () => {
+    const note = parseNote('product.md', '# Knowledge base\n\nA knowledge base is a structured source of answers.\n')
+    const audit = auditNote(note)
+    const keywordPlan = await buildKeywordPlan(note, audit, undefined, ['knowledge base'])
+    const brief = createContentBrief(note, audit)
+    const opportunityMap = buildKeywordOpportunityMap('seo/keywords.json', [{ term: 'knowledge base guide', intent: 'informational', source: 'manual', capturedAt: 'today', targetPage: '/guide', status: 'planned', cluster: 'knowledge base' }])
+    const production = buildProductionPlan(brief, audit, keywordPlan, opportunityMap)
+    expect(production.contentInputs.keywordMap.join('\n')).toContain('Opportunity cluster')
   })
 })

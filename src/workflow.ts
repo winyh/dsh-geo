@@ -1,5 +1,5 @@
 import type { WebRuntime, WebSearchResult } from '@deepseek-ai/dsh-web'
-import type { AuditResult, ContentBrief, KeywordCandidate, KeywordIntent, KeywordPlan, KnowledgeSignal, NoteSnapshot, ProductionPlan, SeoSop, SeoStandardReport, SourceType } from './types.js'
+import type { AuditResult, ContentBrief, KeywordCandidate, KeywordIntent, KeywordOpportunityMap, KeywordPlan, KnowledgeSignal, NoteSnapshot, ProductionPlan, SeoSop, SeoStandardReport, SourceType } from './types.js'
 
 interface SearchLike {
   search(request: { query: string; maxResults?: number }, signal?: AbortSignal): Promise<WebSearchResult>
@@ -168,7 +168,7 @@ export async function buildKeywordPlan(
   }
 }
 
-export function buildProductionPlan(brief: ContentBrief, audit: AuditResult, keywordPlan: KeywordPlan): ProductionPlan {
+export function buildProductionPlan(brief: ContentBrief, audit: AuditResult, keywordPlan: KeywordPlan, opportunityMap?: KeywordOpportunityMap): ProductionPlan {
   return {
     contentInputs: {
       source: [
@@ -185,7 +185,11 @@ export function buildProductionPlan(brief: ContentBrief, audit: AuditResult, key
       seoStandard: keywordPlan.seoGuidance.length > 0
         ? keywordPlan.seoGuidance
         : ['No current Google-standard warning was raised by the available source; keep deployment-level checks marked unknown until HTML/Search Console validation.'],
-      keywordMap: keywordPlan.candidates.slice(0, 18).map((candidate) => `${candidate.role}/${candidate.intent}: ${candidate.term} — ${candidate.evidence.join(', ')}`),
+      keywordMap: [
+        ...keywordPlan.candidates.slice(0, 18).map((candidate) => `${candidate.role}/${candidate.intent}: ${candidate.term} — ${candidate.evidence.join(', ')}`),
+        ...(opportunityMap ? opportunityMap.clusters.slice(0, 12).map((cluster) => `Opportunity cluster/${cluster.priority}: ${cluster.name} — target pages: ${cluster.targetPages.join(', ') || 'unassigned'}; terms: ${cluster.terms.slice(0, 8).join(', ')}`) : []),
+        ...(opportunityMap ? opportunityMap.cannibalization.slice(0, 8).map((item) => `Cannibalization: ${item.term} — ${item.targetPages.join(', ')}`) : []),
+      ],
     },
     stages: [
       {
@@ -265,7 +269,7 @@ export function buildSeoSop(input: {
       : 'draft'
   return {
     name: '标准 SEO/GEO/AEO 内容生产 SOP',
-    version: '0.3.0',
+    version: '0.4.0',
     mode: 'read-only',
     currentStep,
     steps: [

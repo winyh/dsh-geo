@@ -256,7 +256,7 @@ export function buildBacklinkPlan(input: BuildBacklinkPlanInput): BacklinkPlan {
   const shortDescription = input.description.trim().slice(0, 240)
   const longDescription = input.description.trim()
   return {
-    version: '0.3.0',
+    version: '0.4.0',
     mode,
     status: candidates.some((candidate) => candidate.status === 'unavailable') ? 'partial' : 'ready',
     product: { name: input.productName.trim(), url: productUrl, canonicalUrl: productUrl },
@@ -340,7 +340,7 @@ export function recordBacklinkEntry(existing: BacklinkRecordEntry[], entry: Back
     return {
       entries: existing,
       result: {
-        version: '0.3.0',
+        version: '0.4.0',
         path: '',
         status: duplicate.status,
         idempotencyKey: entry.idempotencyKey,
@@ -357,7 +357,7 @@ export function recordBacklinkEntry(existing: BacklinkRecordEntry[], entry: Back
   return {
     entries: next,
     result: {
-      version: '0.3.0',
+      version: '0.4.0',
       path: '',
       status: entry.status,
       idempotencyKey: entry.idempotencyKey,

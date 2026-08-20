@@ -2,16 +2,20 @@ import { createHash, randomBytes } from 'node:crypto'
 import { isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-web'
 import { createContentBrief, auditNote } from './audit.js'
 import { buildBacklinkPlan, extractPreflight, normalizeBacklinkRecord, parseBacklinkRecordFile, recordBacklinkEntry, summarizeBacklinkRecords } from './backlinks.js'
+import { DEFAULT_PROJECT_CONTEXT_PATH, createProjectContext, parseProjectContext, projectContextResult } from './context.js'
 import { buildEffectReview } from './effect.js'
+import { buildKeywordOpportunityMap, importKeywordData } from './keywords.js'
+import { buildBacklinkProfile, buildCompetitorGap, buildPromptReview, buildSiteAuditPage, buildSiteAuditResult, parseBacklinkProfileRows, sameOriginLinks } from './research.js'
 import { readNote } from './vault.js'
 import { scanVault, summarizeVault } from './vault.js'
-import { fetchPublicDocument, isPublicUrl, readLocalDocument, type SourceDocument } from './web.js'
+import { extractTechnicalSeo, fetchPublicDocument, isPublicUrl, readLocalDocument, type SourceDocument } from './web.js'
 import { buildKeywordPlan, buildProductionPlan, buildSeoSop } from './workflow.js'
-import type { BacklinkStatus, ContentBrief, FileSystemLike, GeoConfig, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
+import type { BacklinkStatus, CoachResult, ContentBrief, FileSystemLike, GeoConfig, KeywordOpportunity, KeywordOpportunityMap, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
 
 type AuditFocus = Pillar | 'all'
 
@@ -655,11 +659,120 @@ const effectReviewSchema = {
       },
       required: true,
     },
+    opportunities: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          type: { type: 'string', enum: ['striking-distance', 'low-ctr', 'indexing', 'cannibalization'], required: true },
+          query: { type: 'string' },
+          page: { type: 'string' },
+          evidence: { type: 'string', required: true },
+          nextAction: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    anomalies: { type: 'array', items: { type: 'string' }, required: true },
     dataQuality: { type: 'string', enum: ['comparable', 'partial', 'insufficient'], required: true },
     nextActions: { type: 'array', items: { type: 'string' }, required: true },
     limitations: { type: 'array', items: { type: 'string' }, required: true },
   },
 } as const
+
+const projectContextSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    version: { type: 'string', required: true },
+    updatedAt: { type: 'string', required: true },
+    businessGoal: { type: 'string', required: true },
+    audience: { type: 'string', required: true },
+    language: { type: 'string', required: true },
+    market: { type: 'string', required: true },
+    brandName: { type: 'string', required: true },
+    canonicalDomain: { type: 'string', required: true },
+    brandTerms: { type: 'array', items: { type: 'string' }, required: true },
+    competitors: { type: 'array', items: { type: 'string' }, required: true },
+    keyPages: { type: 'array', items: { type: 'string' }, required: true },
+    conversionGoals: { type: 'array', items: { type: 'string' }, required: true },
+    constraints: { type: 'array', items: { type: 'string' }, required: true },
+    sourceNotes: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
+const projectContextResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    path: { type: 'string', required: true },
+    status: { type: 'string', enum: ['missing', 'partial', 'ready'], required: true },
+    context: projectContextSchema,
+    missingFields: { type: 'array', items: { type: 'string' }, required: true },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+  },
+  required: true,
+} as const
+
+const keywordImportSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    path: { type: 'string', required: true },
+    imported: { type: 'number', required: true },
+    updated: { type: 'number', required: true },
+    skipped: { type: 'number', required: true },
+    errors: { type: 'array', items: { type: 'string' }, required: true },
+    total: { type: 'number', required: true },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+  },
+  required: true,
+} as const
+
+const keywordOpportunityMapSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    path: { type: 'string', required: true },
+    total: { type: 'number', required: true },
+    clusters: { type: 'json', required: true },
+    cannibalization: { type: 'json', required: true },
+    unassigned: { type: 'array', items: { type: 'string' }, required: true },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
+const coachSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    currentStep: { type: 'string', enum: ['project-context', 'source', 'keyword-import', 'keyword-map', 'effect-review', 'backlink-plan', 'next-diagnosis'], required: true },
+    status: { type: 'string', enum: ['ready', 'blocked', 'complete'], required: true },
+    reason: { type: 'string', required: true },
+    inputs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true },
+          status: { type: 'string', enum: ['present', 'missing', 'partial'], required: true },
+          path: { type: 'string' },
+          note: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+    suggestedPrompt: { type: 'string', required: true },
+  },
+  required: true,
+} as const
+
+const researchJsonSchema = { type: 'json', required: true } as const
 
 const workflowOutputSchema = {
   type: 'object',
@@ -720,9 +833,11 @@ const workflowOutputSchema = {
       },
       required: true,
     },
+    projectContext: projectContextResultSchema,
     audit: auditOutputSchema,
     sop: sopSchema,
     keywordPlan: keywordPlanSchema,
+    keywordOpportunities: keywordOpportunityMapSchema,
     contentBrief: briefOutputSchema,
     productionPlan: productionPlanSchema,
     writeback: {
@@ -754,6 +869,10 @@ function renderValue(value: unknown, maxChars: number) {
   const text = JSON.stringify(value, null, 2)
   const rendered = text.length > maxChars ? `${text.slice(0, maxChars)}\n... result presentation truncated by dsh-geo ...` : text
   return [{ type: 'text' as const, text: rendered }]
+}
+
+function jsonResult<T>(value: T): JsonValue {
+  return JSON.parse(JSON.stringify(value)) as JsonValue
 }
 
 function contentHash(content: string): string {
@@ -928,6 +1047,35 @@ async function readBacklinkRecords(fs: FileSystemLike, path: string, config: Geo
   return { path: scopedPath, target, info, entries: parseBacklinkRecordFile(content) }
 }
 
+async function readOptionalTextFile(fs: FileSystemLike, path: string, config: GeoConfig, signal?: AbortSignal): Promise<{ path: string; target: unknown; info?: { type: string; size?: number; version: unknown }; content: string } | undefined> {
+  const scopedPath = await ensureInsideRoot(fs, config, path, signal)
+  const target = await fs.resolve(scopedPath, { signal })
+  const info = await fs.stat(target, signal)
+  if (!info) return undefined
+  if (info.type !== 'file') throw new Error(`Path is not a file: ${path}`)
+  if (info.size !== undefined && info.size > config.maxTextChars) throw new Error(`File exceeds maxTextChars (${config.maxTextChars}): ${path}`)
+  return { path: scopedPath, target, info, content: await fs.readText(target, signal) }
+}
+
+function parseJsonArray(content: string, path: string): unknown[] {
+  try {
+    const parsed: unknown = JSON.parse(content)
+    if (Array.isArray(parsed)) return parsed
+    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { keywords?: unknown }).keywords)) return (parsed as { keywords: unknown[] }).keywords
+    throw new Error(`Expected a JSON array in ${path}.`)
+  } catch (error) {
+    throw new Error(`Cannot parse ${path}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+async function readKeywordFile(fs: FileSystemLike, path: string, config: GeoConfig, signal?: AbortSignal): Promise<{ path: string; target: unknown; info?: { type: string; size?: number; version: unknown }; items: KeywordOpportunity[] }> {
+  const loaded = await readOptionalTextFile(fs, path, config, signal)
+  if (!loaded) return { path: await ensureInsideRoot(fs, config, path, signal), target: await fs.resolve(await ensureInsideRoot(fs, config, path, signal), { signal }), items: [] }
+  const values = parseJsonArray(loaded.content, path)
+  const items = values.filter((value): value is KeywordOpportunity => Boolean(value && typeof value === 'object' && typeof (value as { term?: unknown }).term === 'string'))
+  return { ...loaded, items }
+}
+
 export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   const fs = fsFrom(ctx)
   const previews = new Map<string, ContentPreview>()
@@ -1026,12 +1174,207 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'geo_project_context',
+    description: 'Read or safely write the local SEO project context used as the default business, audience, market and brand background. It never sends the context to public search. Reads by default; writing only updates a JSON file inside defaultRoot.',
+    parameters: {
+      action: { type: 'string', enum: ['read', 'write'], required: true },
+      path: { type: 'string', description: `Optional JSON path; defaults to ${DEFAULT_PROJECT_CONTEXT_PATH}.` },
+      context: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          businessGoal: { type: 'string' },
+          audience: { type: 'string' },
+          language: { type: 'string' },
+          market: { type: 'string' },
+          brandName: { type: 'string' },
+          canonicalDomain: { type: 'string' },
+          brandTerms: { type: 'array', items: { type: 'string' } },
+          competitors: { type: 'array', items: { type: 'string' } },
+          keyPages: { type: 'array', items: { type: 'string' } },
+          conversionGoals: { type: 'array', items: { type: 'string' } },
+          constraints: { type: 'array', items: { type: 'string' } },
+          sourceNotes: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    output: {
+      schema: projectContextResultSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const path = args.path?.trim() || DEFAULT_PROJECT_CONTEXT_PATH
+      const loaded = await readOptionalTextFile(fs, path, config, exec.signal)
+      if (args.action === 'read') {
+        if (!loaded) return projectContextResult(path)
+        return projectContextResult(path, parseProjectContext(loaded.content))
+      }
+      const context = createProjectContext(args.context || {})
+      const target = loaded?.target || await fs.resolve(await ensureInsideRoot(fs, config, path, exec.signal), { signal: exec.signal })
+      const expected = loaded?.info ? { kind: 'replaceIfVersion' as const, version: loaded.info.version } : { kind: 'createIfAbsent' as const }
+      await fs.writeText(target, JSON.stringify(context, null, 2) + '\n', expected, exec.signal)
+      return projectContextResult(path, context)
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_keyword_import',
+    description: 'Import user-provided keyword opportunities from CSV, JSON or a Markdown table into a local JSON opportunity file. It preserves qualitative/unknown boundaries and never invents volume or difficulty.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'JSON path inside defaultRoot, for example seo/keyword-opportunities.json.' },
+      data: { type: 'string', required: true, description: 'CSV, JSON array/object with keywords, or Markdown table. Supported fields include term, intent, volume, difficulty, country, targetPage, cluster and status.' },
+      source: { type: 'string', description: 'Source label such as Search Console export, Ads export or manual research.' },
+    },
+    output: {
+      schema: keywordImportSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      if (args.data.length > config.maxTextChars) throw new Error(`Keyword import exceeds maxTextChars (${config.maxTextChars}).`)
+      const loaded = await readKeywordFile(fs, args.path, config, exec.signal)
+      const imported = importKeywordData(loaded.path, loaded.items, args.data, args.source?.trim() || 'manual-import')
+      const content = JSON.stringify(imported.items, null, 2) + '\n'
+      if (content.length > config.maxTextChars) throw new Error(`Keyword opportunity file exceeds maxTextChars (${config.maxTextChars}). Split the import into focused files.`)
+      const expected = loaded.info ? { kind: 'replaceIfVersion' as const, version: loaded.info.version } : { kind: 'createIfAbsent' as const }
+      await fs.writeText(loaded.target, content, expected, exec.signal)
+      return imported.result
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_keyword_opportunities',
+    description: 'Build a keyword opportunity map from a local imported JSON file: clusters, target-page mapping, unassigned terms and cannibalization risks. Reads only.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'JSON opportunity file inside defaultRoot.' },
+    },
+    output: {
+      schema: keywordOpportunityMapSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const loaded = await readKeywordFile(fs, args.path, config, exec.signal)
+      return buildKeywordOpportunityMap(loaded.path, loaded.items)
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_coach',
+    description: 'Route a manual SEO/GEO/AEO project to its next useful action by checking project context, source, keyword map and effect evidence. It is a lightweight SOP guide, not an approval or role workflow.',
+    parameters: {
+      source: { type: 'string', description: 'Optional public URL or local Markdown/HTML snapshot already chosen for this cycle.' },
+      projectContextPath: { type: 'string', description: `Optional context path; defaults to ${DEFAULT_PROJECT_CONTEXT_PATH}.` },
+      keywordPath: { type: 'string', description: 'Optional local keyword opportunity JSON path.' },
+      effectDataProvided: { type: 'boolean', description: 'Set true when same-scope before/after performance data is ready for geo_effect_review.' },
+      backlinkPath: { type: 'string', description: 'Optional local backlink campaign JSON path.' },
+      includeBacklink: { type: 'boolean', description: 'Optional; if true, recommend the manual backlink branch after effect review.' },
+    },
+    output: {
+      schema: coachSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec): Promise<CoachResult> {
+      const projectContextPath = args.projectContextPath?.trim() || DEFAULT_PROJECT_CONTEXT_PATH
+      const contextFile = await readOptionalTextFile(fs, projectContextPath, config, exec.signal)
+      const context = contextFile ? parseProjectContext(contextFile.content) : undefined
+      const contextStatus = projectContextResult(projectContextPath, context)
+      const inputs: Array<{ name: string; status: 'present' | 'missing' | 'partial'; path?: string; note: string }> = [
+        { name: 'project-context', status: contextStatus.status === 'ready' ? 'present' : contextStatus.status === 'partial' ? 'partial' : 'missing', path: projectContextPath, note: contextStatus.missingFields.length > 0 ? `缺少：${contextStatus.missingFields.join('、')}` : '业务目标、受众和市场背景已就绪。' },
+        { name: 'source', status: args.source?.trim() ? 'present' as const : 'missing' as const, note: args.source?.trim() ? '已有本轮分析来源。' : '尚未指定公开 URL 或本地快照。' },
+      ]
+      if (contextStatus.status !== 'ready') {
+        return {
+          currentStep: 'project-context',
+          status: 'blocked',
+          reason: '先补齐项目上下文，后续关键词和内容优先级才有业务边界。',
+          inputs,
+          nextActions: contextStatus.nextActions,
+          suggestedPrompt: `请运行 geo_project_context action=write，填写 businessGoal、audience、language、market、brandName 和 canonicalDomain；路径使用 ${projectContextPath}。`,
+        }
+      }
+      if (!args.source?.trim()) {
+        return {
+          currentStep: 'source',
+          status: 'blocked',
+          reason: '没有来源就无法建立页面基线。',
+          inputs,
+          nextActions: ['选择公开 URL；若页面需要登录或 JavaScript，先导出 Markdown/HTML 放到 defaultRoot。', '然后运行 geo_workflow，保持只读。'],
+          suggestedPrompt: '请运行 geo_workflow，来源是 <公开URL或defaultRoot内的快照路径>，使用 project context 作为默认目标背景，不写文件。',
+        }
+      }
+      const keywordPath = args.keywordPath?.trim()
+      if (!keywordPath) {
+        return {
+          currentStep: 'keyword-import',
+          status: 'ready',
+          reason: '项目上下文和来源已具备，但还没有独立关键词机会库。',
+          inputs: [...inputs, { name: 'keyword-opportunities', status: 'missing', note: '未提供本地关键词 JSON 文件。' }],
+          nextActions: ['导入 Search Console、Ads、关键词工具或人工研究结果；缺失字段保持空白。'],
+          suggestedPrompt: '请运行 geo_keyword_import，将我的 CSV/JSON/Markdown 关键词数据写入 seo/keyword-opportunities.json，然后运行 geo_keyword_opportunities。',
+        }
+      }
+      const keywordFile = await readKeywordFile(fs, keywordPath, config, exec.signal)
+      const map = buildKeywordOpportunityMap(keywordFile.path, keywordFile.items)
+      inputs.push({ name: 'keyword-opportunities', status: keywordFile.items.length > 0 ? 'present' : 'missing', path: keywordFile.path, note: `${keywordFile.items.length} 个关键词机会。` })
+      if (keywordFile.items.length === 0) {
+        return {
+          currentStep: 'keyword-import',
+          status: 'ready',
+          reason: '关键词文件存在但没有可用机会项。',
+          inputs,
+          nextActions: ['导入至少一组带 term/keyword 的数据；不要用模型估算搜索量。'],
+          suggestedPrompt: `请运行 geo_keyword_import，path=${keywordPath}，导入已核实的关键词数据。`,
+        }
+      }
+      if (map.cannibalization.length > 0 || map.unassigned.length > 0) {
+        return {
+          currentStep: 'keyword-map',
+          status: 'ready',
+          reason: map.cannibalization.length > 0 ? '发现关键词蚕食，需要先分配主页面。' : '仍有关键词没有目标页面，需要完成页面映射。',
+          inputs,
+          nextActions: map.nextActions,
+          suggestedPrompt: `请运行 geo_keyword_opportunities，path=${keywordPath}，根据结果为每个高优先级词指定唯一目标页面；先解决蚕食，再生产新内容。`,
+        }
+      }
+      if (!args.effectDataProvided) {
+        return {
+          currentStep: 'effect-review',
+          status: 'ready',
+          reason: '关键词已经映射，但本轮还没有同口径前后效果数据。',
+          inputs,
+          nextActions: ['从 Search Console/站点分析导出同页面、同地区/设备和相邻周期的指标。', '把查询级 rows 一并传给 geo_effect_review，以识别第二页、低 CTR、未收录和蚕食机会。'],
+          suggestedPrompt: '请运行 geo_effect_review，提供 baseline、current 和 query/page 级 rows；不要把一次变化归因于单一动作。',
+        }
+      }
+      if (args.includeBacklink && !args.backlinkPath?.trim()) {
+        return {
+          currentStep: 'backlink-plan',
+          status: 'ready',
+          reason: '内容和效果复盘完成，可以选择相关的手动产品发现/外链分发。',
+          inputs: [...inputs, { name: 'backlink-campaign', status: 'missing', note: '未提供外链记录文件；这不是必需项。' }],
+          nextActions: ['仅选择真正相关的资源，先运行 geo_backlink_plan 做预检。', '用户在平台原生页面手动完成后，用 geo_backlink_record 记录真实结果。'],
+          suggestedPrompt: '请运行 geo_backlink_plan，先做质量筛选和匿名预检，不提交表单；完成平台动作后再记录结果。',
+        }
+      }
+      return {
+        currentStep: 'next-diagnosis',
+        status: 'complete',
+        reason: '当前周期输入齐全，可以回到页面诊断并选择下一项最高影响动作。',
+        inputs,
+        nextActions: ['运行 geo_workflow 或 geo_audit_note，围绕效果复盘中最高优先级机会做一次小范围改动。', '改动先 geo_preview_content，再写回并重新审计；下一周期保持相同数据口径。'],
+        suggestedPrompt: `请对 ${args.source.trim()} 运行 geo_workflow，结合 project context 和已映射关键词，只处理本周期最高优先级问题，并返回新的验证清单。`,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'geo_workflow',
     description: 'Run the complete SEO/GEO/AEO workflow from one public URL or one local Markdown/HTML snapshot: diagnose, build a qualitative keyword plan, create a content-production brief, and return safe write-back instructions. Reads only.',
     parameters: {
       source: { type: 'string', required: true, description: 'Public http(s) URL, local Markdown path, or local HTML export/snapshot from a public or private account page.' },
       goal: { type: 'string', description: 'Optional business or user goal, such as leads, product education, documentation discovery or support deflection.' },
       audience: { type: 'string', description: 'Optional target audience to use in the production brief.' },
+      projectContextPath: { type: 'string', description: `Optional local context JSON path; defaults to ${DEFAULT_PROJECT_CONTEXT_PATH}.` },
+      keywordPath: { type: 'string', description: 'Optional local imported keyword opportunity JSON path. When supplied, its clusters and page mapping are included in productionPlan.contentInputs.' },
       seedKeywords: { type: 'array', items: { type: 'string' }, description: 'Optional terms supplied by the user; the first term becomes the primary query.' },
       useKnowledgeBase: { type: 'boolean', description: 'Optional; defaults to true and uses local Markdown titles, headings, entities, queries and bounded excerpts as private context for related terms and content inputs.' },
       knowledgeMaxFiles: { type: 'integer', description: 'Optional local knowledge-base scan cap; never exceeds configured maxFiles.' },
@@ -1043,6 +1386,16 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     async execute(args, exec) {
       const source = args.source.trim()
       if (!source) throw new Error('source is required: pass a public URL or a local Markdown/HTML snapshot path.')
+      const projectContextPath = args.projectContextPath?.trim() || DEFAULT_PROJECT_CONTEXT_PATH
+      const projectContextFile = await readOptionalTextFile(fs, projectContextPath, config, exec.signal)
+      const projectContext = projectContextFile ? parseProjectContext(projectContextFile.content) : undefined
+      const contextResult = projectContextResult(projectContextPath, projectContext)
+      const keywordOpportunityFile = args.keywordPath?.trim() ? await readKeywordFile(fs, args.keywordPath.trim(), config, exec.signal) : undefined
+      const keywordOpportunities: KeywordOpportunityMap | undefined = keywordOpportunityFile
+        ? buildKeywordOpportunityMap(keywordOpportunityFile.path, keywordOpportunityFile.items)
+        : undefined
+      const effectiveGoal = args.goal?.trim() || projectContext?.businessGoal || undefined
+      const effectiveAudience = args.audience?.trim() || projectContext?.audience || undefined
       let document: SourceDocument
       if (isPublicUrl(source)) {
         document = await fetchPublicDocument(ctx.web, source, config, exec.signal)
@@ -1088,16 +1441,16 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
       const contentBrief = applyWorkflowContext(
         document,
         createContentBrief(document.note, audit),
-        args.goal,
-        args.audience,
+        effectiveGoal,
+        effectiveAudience,
       )
-      const productionPlan = buildProductionPlan(contentBrief, audit, keywordPlan)
+      const productionPlan = buildProductionPlan(contentBrief, audit, keywordPlan, keywordOpportunities)
       const sop = buildSeoSop({
         source,
         sourceType: document.sourceType,
         sourceTruncated: document.truncated,
-        goal: args.goal,
-        audience: args.audience,
+        goal: effectiveGoal,
+        audience: effectiveAudience,
         knowledgeBaseEnabled: knowledgeEnabled,
         knowledgeBaseIssues: knowledgeErrors,
         audit,
@@ -1132,9 +1485,11 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
           errors: knowledgeErrors,
           privacy: 'Knowledge-base context stays inside the Harness filesystem. Its titles, headings, entities, queries and bounded excerpts are not sent to public search; only explicit user seedKeywords may be used for URL search signals.',
         },
+        projectContext: contextResult,
         audit,
         sop,
         keywordPlan,
+        ...(keywordOpportunities ? { keywordOpportunities } : {}),
         contentBrief,
         productionPlan,
         writeback: {
@@ -1308,6 +1663,24 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         },
         required: true,
       },
+      rows: {
+        type: 'array',
+        description: 'Optional query/page-level rows from the same reporting scope. Used only to route second-page, low-CTR, indexing and cannibalization opportunities.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            query: { type: 'string' },
+            page: { type: 'string' },
+            impressions: { type: 'number' },
+            clicks: { type: 'number' },
+            ctrPercent: { type: 'number' },
+            averagePosition: { type: 'number' },
+            indexed: { type: 'boolean' },
+            indexNote: { type: 'string' },
+          },
+        },
+      },
     },
     output: {
       schema: effectReviewSchema,
@@ -1315,7 +1688,196 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     },
     async execute(args) {
       if (!args.target.trim() || !args.baseline.period.trim() || !args.current.period.trim()) throw new Error('target, baseline.period and current.period are required.')
-      return buildEffectReview({ target: args.target.trim(), baseline: args.baseline, current: args.current })
+      return buildEffectReview({ target: args.target.trim(), baseline: args.baseline, current: args.current, rows: args.rows })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_competitor_gap',
+    description: 'Compare user-supplied target and competitor keyword/topic/page inventories to identify research gaps. Reads only; it does not scrape competitor sites or infer traffic and rankings.',
+    parameters: {
+      target: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          keywords: { type: 'array', items: { type: 'string' } },
+          topics: { type: 'array', items: { type: 'string' } },
+          pages: { type: 'array', items: { type: 'string' } },
+        },
+        required: true,
+      },
+      competitors: {
+        type: 'array',
+        required: true,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', required: true },
+            url: { type: 'string' },
+            keywords: { type: 'array', items: { type: 'string' } },
+            topics: { type: 'array', items: { type: 'string' } },
+            pages: { type: 'array', items: { type: 'string' } },
+            notes: { type: 'string' },
+          },
+          required: true,
+        },
+      },
+    },
+    output: {
+      schema: researchJsonSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args) {
+      return jsonResult(buildCompetitorGap({ target: args.target, competitors: args.competitors }))
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_backlink_profile',
+    description: 'Review user-supplied backlink CSV/JSON rows for broken, lost, nofollow/sponsored/ugc, risky and competitor-gap signals. Reads only and does not judge links by quantity alone.',
+    parameters: {
+      rows: {
+        type: 'array',
+        required: true,
+        description: 'Rows with sourceUrl and optional targetUrl, referringDomain, nofollow, sponsored, ugc, broken, lost, spamScore.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sourceUrl: { type: 'string', required: true },
+            targetUrl: { type: 'string' },
+            referringDomain: { type: 'string' },
+            anchor: { type: 'string' },
+            nofollow: { type: 'boolean' },
+            sponsored: { type: 'boolean' },
+            ugc: { type: 'boolean' },
+            broken: { type: 'boolean' },
+            lost: { type: 'boolean' },
+            spamScore: { type: 'number' },
+            competitor: { type: 'string' },
+            capturedAt: { type: 'string' },
+          },
+          required: true,
+        },
+      },
+      competitorRows: {
+        type: 'array',
+        description: 'Optional competitor backlink rows in the same shape, used only for referring-domain gap hints.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sourceUrl: { type: 'string', required: true },
+            referringDomain: { type: 'string' },
+          },
+          required: true,
+        },
+      },
+    },
+    output: {
+      schema: researchJsonSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args) {
+      const rows = parseBacklinkProfileRows(args.rows)
+      const competitorRows = parseBacklinkProfileRows(args.competitorRows || [])
+      if (rows.length === 0) throw new Error('At least one backlink row with sourceUrl is required.')
+      return jsonResult(buildBacklinkProfile(rows, competitorRows))
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_site_audit',
+    description: 'Run a bounded, same-origin, anonymous HTML audit from a public URL. It checks page-level title, description, canonical, robots, H1, links, image alt and structured-data signals; it does not crawl private areas or claim Lighthouse/Search Console results.',
+    parameters: {
+      startUrl: { type: 'string', required: true, description: 'Public http(s) start URL.' },
+      maxPages: { type: 'integer', description: 'Optional cap, never above 50; defaults to 10.' },
+      maxDepth: { type: 'integer', description: 'Optional same-origin link depth, 0-2; defaults to 1.' },
+    },
+    output: {
+      schema: researchJsonSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const startUrl = args.startUrl.trim()
+      if (!isPublicUrl(startUrl)) throw new Error('geo_site_audit requires a public http(s) URL.')
+      const maxPages = Math.min(50, Math.max(1, args.maxPages ?? 10))
+      const maxDepth = Math.min(2, Math.max(0, args.maxDepth ?? 1))
+      const origin = new URL(startUrl).origin
+      const queue: Array<{ url: string; depth: number }> = [{ url: startUrl, depth: 0 }]
+      const queued = new Set([startUrl])
+      const visited = new Set<string>()
+      const pages = []
+      const skippedLinks: string[] = []
+      while (queue.length > 0 && pages.length < maxPages) {
+        const next = queue.shift()
+        if (!next || visited.has(next.url)) continue
+        visited.add(next.url)
+        try {
+          const result = await ctx.web.fetch({ url: next.url }, exec.signal)
+          const html = result.body.content
+          const isHtml = result.body.kind === 'html'
+          const technical = isHtml ? extractTechnicalSeo(html, result.url) : undefined
+          pages.push(buildSiteAuditPage({
+            url: next.url,
+            finalUrl: result.url,
+            statusCode: result.statusCode,
+            html: isHtml ? html : '',
+            technical,
+            truncated: result.truncated,
+          }))
+          if (isHtml && next.depth < maxDepth && result.statusCode >= 200 && result.statusCode < 400) {
+            const discovered = sameOriginLinks(html, result.url)
+            skippedLinks.push(...discovered.skipped)
+            for (const link of discovered.links) {
+              try {
+                if (new URL(link).origin !== origin || queued.has(link)) continue
+                queued.add(link)
+                queue.push({ url: link, depth: next.depth + 1 })
+              } catch {
+                skippedLinks.push(link)
+              }
+            }
+          }
+        } catch (error) {
+          skippedLinks.push(`${next.url}：${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+      return jsonResult(buildSiteAuditResult({ startUrl, pages, skippedLinks, maxPages, depth: maxDepth }))
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_prompt_review',
+    description: 'Review manually captured answer-engine prompts across models for brand mention and citation evidence. Reads only; it does not scrape model interfaces or claim universal AI visibility.',
+    parameters: {
+      runs: {
+        type: 'array',
+        required: true,
+        description: 'Manual records with prompt, model, capturedAt, answer, citedUrls and optional brandMentioned.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            prompt: { type: 'string', required: true },
+            model: { type: 'string', required: true },
+            capturedAt: { type: 'string', required: true },
+            answer: { type: 'string', required: true },
+            citedUrls: { type: 'array', items: { type: 'string' }, required: true },
+            brandMentioned: { type: 'boolean' },
+          },
+          required: true,
+        },
+      },
+    },
+    output: {
+      schema: researchJsonSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args) {
+      if (args.runs.length === 0) throw new Error('At least one manually captured prompt run is required.')
+      return jsonResult(buildPromptReview(args.runs))
     },
   }))
 

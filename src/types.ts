@@ -347,6 +347,17 @@ export interface EffectSnapshot {
   referralConversions?: number
 }
 
+export interface EffectPerformanceRow {
+  query?: string
+  page?: string
+  impressions?: number
+  clicks?: number
+  ctrPercent?: number
+  averagePosition?: number
+  indexed?: boolean
+  indexNote?: string
+}
+
 export interface EffectReview {
   version: string
   target: string
@@ -362,9 +373,178 @@ export interface EffectReview {
     direction: 'up' | 'down' | 'unchanged' | 'unknown'
     interpretation: string
   }>
+  opportunities: Array<{ type: 'striking-distance' | 'low-ctr' | 'indexing' | 'cannibalization'; query?: string; page?: string; evidence: string; nextAction: string }>
+  anomalies: string[]
   dataQuality: 'comparable' | 'partial' | 'insufficient'
   nextActions: string[]
   limitations: string[]
+}
+
+export interface ProjectContext {
+  version: string
+  updatedAt: string
+  businessGoal: string
+  audience: string
+  language: string
+  market: string
+  brandName: string
+  canonicalDomain: string
+  brandTerms: string[]
+  competitors: string[]
+  keyPages: string[]
+  conversionGoals: string[]
+  constraints: string[]
+  sourceNotes: string[]
+}
+
+export interface ProjectContextResult {
+  path: string
+  status: 'missing' | 'partial' | 'ready'
+  context?: ProjectContext
+  missingFields: string[]
+  nextActions: string[]
+}
+
+export type KeywordOpportunityStatus = 'candidate' | 'planned' | 'writing' | 'published' | 'tracking' | 'discarded'
+
+export interface KeywordOpportunity {
+  term: string
+  intent: KeywordIntent
+  volume?: number
+  difficulty?: number
+  cpc?: number
+  country?: string
+  device?: 'desktop' | 'mobile' | 'all'
+  source: string
+  capturedAt: string
+  targetPage?: string
+  cluster?: string
+  status: KeywordOpportunityStatus
+  notes?: string
+}
+
+export interface KeywordImportResult {
+  path: string
+  imported: number
+  updated: number
+  skipped: number
+  errors: string[]
+  total: number
+  nextActions: string[]
+}
+
+export interface KeywordOpportunityMap {
+  path: string
+  total: number
+  clusters: Array<{ name: string; terms: string[]; targetPages: string[]; priority: 'high' | 'medium' | 'low' }>
+  cannibalization: Array<{ term: string; targetPages: string[]; nextAction: string }>
+  unassigned: string[]
+  nextActions: string[]
+}
+
+export interface CoachResult {
+  currentStep: 'project-context' | 'source' | 'keyword-import' | 'keyword-map' | 'effect-review' | 'backlink-plan' | 'next-diagnosis'
+  status: 'ready' | 'blocked' | 'complete'
+  reason: string
+  inputs: Array<{ name: string; status: 'present' | 'missing' | 'partial'; path?: string; note: string }>
+  nextActions: string[]
+  suggestedPrompt: string
+}
+
+export interface CompetitorDataset {
+  name: string
+  url?: string
+  keywords: string[]
+  topics: string[]
+  pages: string[]
+  notes?: string
+}
+
+export interface CompetitorGapResult {
+  target: { keywords: string[]; topics: string[]; pages: string[] }
+  competitors: CompetitorDataset[]
+  missingKeywords: string[]
+  missingTopics: string[]
+  pageGaps: string[]
+  caveats: string[]
+  nextActions: string[]
+}
+
+export interface BacklinkProfileRow {
+  sourceUrl: string
+  targetUrl?: string
+  referringDomain?: string
+  anchor?: string
+  nofollow?: boolean
+  sponsored?: boolean
+  ugc?: boolean
+  broken?: boolean
+  lost?: boolean
+  spamScore?: number
+  competitor?: string
+  capturedAt?: string
+}
+
+export interface BacklinkProfileResult {
+  total: number
+  referringDomains: number
+  broken: string[]
+  lost: string[]
+  nofollow: string[]
+  risky: Array<{ sourceUrl: string; reason: string }>
+  competitorGaps: string[]
+  caveats: string[]
+  nextActions: string[]
+}
+
+export interface SiteAuditPage {
+  url: string
+  finalUrl: string
+  statusCode: number
+  title?: string
+  metaDescription?: string
+  canonicalUrl?: string
+  robots?: string
+  indexable: 'likely' | 'blocked' | 'unknown'
+  h1Count: number
+  internalLinks: number
+  imageCount: number
+  imagesMissingAlt: number
+  structuredDataTypes: string[]
+  truncated: boolean
+  note: string
+}
+
+export interface SiteAuditResult {
+  startUrl: string
+  pages: SiteAuditPage[]
+  skippedLinks: string[]
+  limits: { maxPages: number; depth: number }
+  caveats: string[]
+  nextActions: string[]
+}
+
+export interface PromptEvidenceRun {
+  prompt: string
+  model: string
+  capturedAt: string
+  answer: string
+  citedUrls: string[]
+  brandMentioned?: boolean
+}
+
+export interface PromptReviewResult {
+  totalRuns: number
+  prompts: Array<{
+    prompt: string
+    models: string[]
+    brandMentionRate: number | undefined
+    citedUrls: string[]
+    missingEvidence: string
+  }>
+  citationCoverage: number
+  caveats: string[]
+  nextActions: string[]
 }
 
 export interface ScanLimits {

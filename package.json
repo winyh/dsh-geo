@@ -1,6 +1,6 @@
 {
   "name": "dsh-geo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "生成式引擎优化（GEO）DeepSeek Harness plugin for SEO, GEO and AEO analysis of Markdown knowledge bases.",
   "type": "module",
   "main": "lib/index.mjs",

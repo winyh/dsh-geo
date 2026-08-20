@@ -1,4 +1,4 @@
-import type { EffectReview, EffectReviewStatus, EffectSnapshot } from './types.js'
+import type { EffectPerformanceRow, EffectReview, EffectReviewStatus, EffectSnapshot } from './types.js'
 
 type MetricKey = Exclude<keyof EffectSnapshot, 'period' | 'source'>
 
@@ -23,7 +23,7 @@ function changePercent(baseline: number, delta: number): number | undefined {
   return Number((delta / Math.abs(baseline) * 100).toFixed(2))
 }
 
-export function buildEffectReview(input: { target: string; baseline: EffectSnapshot; current: EffectSnapshot }): EffectReview {
+export function buildEffectReview(input: { target: string; baseline: EffectSnapshot; current: EffectSnapshot; rows?: EffectPerformanceRow[] }): EffectReview {
   let improved = 0
   let declined = 0
   let comparable = 0
@@ -76,6 +76,57 @@ export function buildEffectReview(input: { target: string; baseline: EffectSnaps
           ? 'declining'
           : 'inconclusive'
   const dataQuality: EffectReview['dataQuality'] = comparable >= 3 ? 'comparable' : comparable > 0 ? 'partial' : 'insufficient'
+  const opportunities: EffectReview['opportunities'] = []
+  const anomalies: string[] = []
+  const rows = input.rows || []
+  for (const row of rows) {
+    if (row.impressions !== undefined && row.clicks !== undefined && row.clicks > row.impressions) anomalies.push(`${row.query || row.page || '未命名行'}：clicks 大于 impressions，检查导入口径。`)
+    if (row.ctrPercent !== undefined && (row.ctrPercent < 0 || row.ctrPercent > 100)) anomalies.push(`${row.query || row.page || '未命名行'}：CTR 超出 0～100%，检查单位是否传成小数。`)
+    if (row.averagePosition !== undefined && row.averagePosition > 8 && row.averagePosition <= 20 && (row.impressions || 0) > 0) {
+      opportunities.push({
+        type: 'striking-distance',
+        ...(row.query ? { query: row.query } : {}),
+        ...(row.page ? { page: row.page } : {}),
+        evidence: `平均排名位置 ${row.averagePosition}，展现 ${row.impressions || 0}；属于可优先推动的第二页/临界机会。`,
+        nextAction: '回到 geo_workflow，检查该查询对应页面的意图覆盖、直接答案、内部链接和来源证据。',
+      })
+    }
+    if (row.impressions !== undefined && row.impressions >= 100 && row.ctrPercent !== undefined && row.ctrPercent < 2) {
+      opportunities.push({
+        type: 'low-ctr',
+        ...(row.query ? { query: row.query } : {}),
+        ...(row.page ? { page: row.page } : {}),
+        evidence: `展现 ${row.impressions}，CTR ${row.ctrPercent}%；这是启发式提示，不是行业基准结论。`,
+        nextAction: '重新检查标题、摘要、页面承诺和搜索意图，确认 SERP 文案与正文一致。',
+      })
+    }
+    if (row.indexed === false) {
+      opportunities.push({
+        type: 'indexing',
+        ...(row.query ? { query: row.query } : {}),
+        ...(row.page ? { page: row.page } : {}),
+        evidence: row.indexNote || '导入数据标记为未收录。',
+        nextAction: '检查 URL 检查、canonical、robots、Sitemap、内部链接和页面质量。',
+      })
+    }
+  }
+  const queryPages = new Map<string, Set<string>>()
+  for (const row of rows) {
+    if (!row.query || !row.page) continue
+    const pages = queryPages.get(row.query.toLocaleLowerCase()) || new Set<string>()
+    pages.add(row.page)
+    queryPages.set(row.query.toLocaleLowerCase(), pages)
+  }
+  for (const [query, pages] of queryPages) {
+    if (pages.size > 1) {
+      opportunities.push({
+        type: 'cannibalization',
+        query,
+        evidence: `同一查询对应 ${pages.size} 个页面：${[...pages].join('、')}。`,
+        nextAction: '选择一个主页面，其他页面改为支持性内容或重新分配搜索意图。',
+      })
+    }
+  }
   const nextActions: string[] = []
   if (dataQuality === 'insufficient') nextActions.push('补充同一页面、同一地区/设备口径和相邻周期的 Search Console 或站点分析数据。')
   if (status === 'declining' || status === 'mixed') {
@@ -85,14 +136,19 @@ export function buildEffectReview(input: { target: string; baseline: EffectSnaps
     if (changes.some((change) => (change.metric === '推荐访问' || change.metric === '推荐转化') && change.interpretation.includes('负向'))) nextActions.push('审计 geo_backlink_record 中的渠道相关性、公开条目准确性和真实推荐访问，不以提交数量替代效果。')
   }
   if (status === 'improving') nextActions.push('保留本次变更和数据口径，继续观察一个相邻周期，再决定是否扩大内容或分发范围。')
+  if (opportunities.some((opportunity) => opportunity.type === 'striking-distance')) nextActions.push('优先处理第二页机会词，再扩大新的主题范围。')
+  if (opportunities.some((opportunity) => opportunity.type === 'indexing')) nextActions.push('先处理未收录页面的技术和质量问题，不要用内容改写掩盖抓取/索引问题。')
+  if (anomalies.length > 0) nextActions.push('先修正导入数据口径，再使用效果结论指导下一轮诊断。')
   if (nextActions.length === 0) nextActions.push('记录本次结果，下一周期继续使用相同口径复查；出现新问题时回到 geo_workflow 或 geo_audit_note。')
   return {
-    version: '0.3.0',
+    version: '0.4.0',
     target: input.target,
     status,
     baseline: input.baseline,
     current: input.current,
     changes,
+    opportunities,
+    anomalies,
     dataQuality,
     nextActions,
     limitations: [

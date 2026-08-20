@@ -21,6 +21,10 @@
 - Preview or apply a complete Markdown replacement, including safe creation of a new note inside `defaultRoot`.
 - Incorporate the backlink_skills approach to candidate resources, quality gates, idempotency keys, manual queues and truthful status records; default behavior is read-only preflight and submission preparation, not mass posting.
 - Compare manually supplied before/after Search Console, site-analytics or referral snapshots and route the next cycle back to diagnosis.
+- Store business goal, audience, market, brand and conversion context locally so each cycle starts from the same project boundary.
+- Import keyword opportunities from CSV/JSON/Markdown and map clusters to target pages, including unassigned terms and cannibalization.
+- Use `geo_coach` to select the next useful action without introducing approval or role management.
+- Review competitor gaps, backlink profile signals, bounded same-origin site audits and manually captured answer-engine citation evidence.
 
 The plugin is local-first. Core analysis runs through the Harness filesystem service. Public URLs use the official anonymous `ctx.web` fetch seam; cookies and credentials are never used. Private or JavaScript-rendered pages should be exported as Markdown/HTML and analyzed as a local snapshot.
 
@@ -67,7 +71,7 @@ This plugin turns those needs into explainable, local-first checks with evidence
 | `geo_audit_note` | Audit one Markdown note |
 | `geo_audit_vault` | Scan a knowledge base |
 | `geo_project_report` | Create a structured project report |
-| `geo_workflow` | Run URL/snapshot diagnosis, Google-standard checks, private knowledge-base keyword planning and content production planning |
+| `geo_workflow` | Run URL/snapshot diagnosis, Google-standard checks, private knowledge-base keyword planning and content production planning; optionally include a local opportunity map |
 | `geo_content_brief` | Generate a structured content brief |
 | `geo_source_check` | Check citations and provenance |
 | `geo_preview_content` | Preview a complete Markdown replacement |
@@ -75,7 +79,15 @@ This plugin turns those needs into explainable, local-first checks with evidence
 | `geo_backlink_plan` | Filter backlink/product-discovery candidates, preflight public routes and prepare a manual submission pack |
 | `geo_backlink_record` | Record a user-completed submission, review, publication or ambiguous outcome |
 | `geo_backlink_audit` | Summarize campaign records, follow-ups, duplicate keys and data-quality errors |
-| `geo_effect_review` | Compare manually supplied before/after metrics and route the next diagnosis |
+| `geo_effect_review` | Compare before/after metrics and query/page rows for second-page, low-CTR, indexing and cannibalization opportunities |
+| `geo_project_context` | Read or safely write local business, audience, market and brand context |
+| `geo_keyword_import` | Import a CSV/JSON/Markdown keyword opportunity file |
+| `geo_keyword_opportunities` | Cluster opportunities and detect page-map/cannibalization risks |
+| `geo_coach` | Route the project to one useful next action |
+| `geo_competitor_gap` | Compare user-supplied competitor topic, keyword and page gaps |
+| `geo_backlink_profile` | Review imported broken/lost/nofollow/risky backlink signals |
+| `geo_site_audit` | Run a bounded same-origin anonymous HTML audit |
+| `geo_prompt_review` | Review manually captured model answers and citation evidence |
 
 ## Install from npm
 
@@ -113,7 +125,8 @@ Follow this first-run sequence:
 2. Set `defaultRoot` in the `dsh-geo` Bundle configuration. It is the only directory the plugin can read or write.
 3. Start or restart Harness with `dsh web`.
 4. Ask for a readiness check.
-5. Run `geo_workflow` on one page and keep the first run read-only.
+5. Save the project boundary with `geo_project_context`.
+6. Run `geo_workflow` on one page and keep the first run read-only.
 
 Minimal Bundle configuration:
 
@@ -132,6 +145,8 @@ If you do not have a knowledge base yet, use a public URL first. For a private p
 | One existing Markdown note | `geo_audit_note` or `geo_workflow` | Find evidence-backed issues and the top actions |
 | A whole Markdown knowledge base | `geo_audit_vault` or `geo_project_report` | Find governance gaps and prioritize files |
 | A planned article or rewrite | `geo_content_brief` | Turn a topic into intent, outline, questions and source gaps |
+| A Search Console or keyword-tool export | `geo_keyword_import` -> `geo_keyword_opportunities` | Import opportunities, cluster them and assign one target page |
+| You are unsure what to do next | `geo_coach` | Return one current step and a copyable next request |
 | A proposed content change | `geo_preview_content` first | Review the diff, then explicitly apply it |
 
 ### The complete operating method
@@ -146,7 +161,9 @@ Use this order for a professional SEO/GEO/AEO job:
 5. Produce or revise content while preserving factual claims and source context.
 6. Verify structure, citations, links, answerability and unknown data.
 7. Preview the Markdown diff, explicitly confirm, apply the guarded write, and re-audit the current file.
-8. Optionally distribute through relevant product-discovery channels: qualify candidates first, submit manually through the platform, then record the truthful outcome.
+8. Review same-scope performance: prioritize striking-distance, low-CTR, indexing and cannibalization evidence.
+9. Optionally distribute through relevant product-discovery channels: qualify candidates first, submit manually through the platform, then record the truthful outcome.
+10. Return to the next diagnosis; the loop can be manual and does not require automation.
 
 The plugin does not invent search volume, ranking difficulty or traffic. Treat `qualitative` as topic signals from public search and `seed-only` as a privacy-preserving plan based on the supplied source and seed terms.
 
@@ -167,6 +184,32 @@ The plugin does not invent search volume, ranking difficulty or traffic. Treat `
 | 9. Re-audit | Current file after writeback | Before/after comparison and next-cycle list | High-priority issues have outcomes and remaining work has a next action |
 
 If a step is not complete, follow `sop.steps[n].nextAction` instead of jumping straight to publication.
+
+### Recommended project files
+
+```text
+project-context.json                 # business goal, audience, market, brand and page actions
+seo/keyword-opportunities.json       # imported keyword opportunities and page mapping
+backlinks/campaign.json              # truthful outcomes from manual distribution work
+```
+
+Create these directories under `defaultRoot` if needed. Keyword data may come from Search Console, Ads, a keyword provider or manual research. Missing volume, difficulty or CPC stays unknown; the plugin does not estimate it.
+
+### Diagnosis -> production -> measurement -> diagnosis
+
+```text
+geo_project_context
+  -> geo_workflow / geo_audit_note
+  -> geo_keyword_import -> geo_keyword_opportunities
+  -> content brief and Markdown draft
+  -> geo_preview_content -> geo_apply_content
+  -> geo_source_check + geo_audit_note
+  -> geo_effect_review (baseline/current + rows)
+  -> geo_coach
+  -> next geo_workflow
+```
+
+Pass query/page rows to `geo_effect_review` when available. It routes second-page, low-CTR, indexing and cannibalization opportunities, while keeping heuristic thresholds explicit and refusing to invent real indexing or traffic evidence.
 
 ### Optional backlink and product-discovery branch
 
@@ -222,6 +265,26 @@ Current: 2026-08, source Search Console, impressions 1400, clicks 70, CTR 5, ave
 Classify the change and return the next diagnosis actions; do not attribute the change to one action without evidence.
 ```
 
+Import keyword opportunities:
+
+```text
+Import my Search Console CSV into seo/keyword-opportunities.json. Preserve the supplied fields, leave missing volume blank, then return clusters, unassigned terms and cannibalization risks.
+```
+
+Route the next action:
+
+```text
+Run geo_coach. Project context: project-context.json. Keyword file: seo/keyword-opportunities.json. Source: snapshots/product.html. Return only the most useful next action and a copyable request.
+```
+
+Competitor and answer-engine evidence:
+
+```text
+Run geo_competitor_gap using only the target and competitor keyword/topic/page inventories I provide. Return research gaps without inferring traffic or rankings.
+Run geo_site_audit for https://example.com with at most 10 pages and depth 1, anonymous same-origin HTML only.
+Run geo_prompt_review on my manually captured model answers and cited URLs; do not claim universal model coverage.
+```
+
 ### Understand the result
 
 `geo_workflow` returns a single structured result. Read it in this order:
@@ -232,9 +295,11 @@ Classify the change and return the next diagnosis actions; do not attribute the 
 | `status` | Whether the workflow completed | If `partial`, fix the access, truncation or data-quality issue first |
 | `audit` | SEO/GEO/AEO scores, evidence and findings | Start with high-impact findings supported by evidence |
 | `keywordPlan` | Primary, secondary, question and entity terms | Map each term to one useful section; do not stuff keywords |
+| `keywordOpportunities` | Imported clusters, target pages, unassigned terms and cannibalization | Resolve page mapping before drafting |
 | `contentBrief` | Audience, intent, outline, FAQs and source gaps | Use it as the writing specification |
 | `productionPlan` | Diagnose, map keywords, draft and verify stages | Complete stages in order and record unknowns |
 | `sop` | Nine-step content SOP, current step, completion criteria and next action | Follow `currentStep`, then use the optional backlink branch after writeback |
+| `projectContext` | Whether the business background is complete and which fields are missing | Complete it before treating recommendations as project decisions |
 | `writeback` | Read-only/preview/apply status | Preview and inspect the diff before any file change |
 
 ### Copy-paste prompts
@@ -251,6 +316,7 @@ Public URL, full read-only workflow:
 Run geo_workflow for https://example.com.
 Goal: increase qualified product-education traffic.
 Audience: first-time evaluators.
+Keyword opportunity file: seo/keyword-opportunities.json.
 Seed keywords: product education, product trial.
 Return the SEO/GEO/AEO diagnosis, qualitative keyword map, content brief and four-stage production plan. Do not write files.
 ```
@@ -360,7 +426,7 @@ Run the complete workflow for https://example.com, use "product education" as th
 ```
 
 ```text
-Run geo_workflow for https://example.com. Use the related notes in my configured knowledge base as private context. Combine the source evidence, Google-standard warnings and keyword map into the content inputs. Do not write files.
+Run geo_workflow for https://example.com. Use the related notes in my configured knowledge base and seo/keyword-opportunities.json as private context. Combine the source evidence, Google-standard warnings and keyword opportunity map into the content inputs. Do not write files.
 ```
 
 Use `focus=seo`, `focus=geo` or `focus=aeo` when you only want one assessment pillar.

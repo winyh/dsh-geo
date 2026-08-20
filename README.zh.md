@@ -19,6 +19,10 @@
 - 先显示 diff，再使用版本保护安全写回 Markdown；也支持在根目录内安全创建新笔记。
 - 吸收 `backlink_skills` 的外链候选、质量筛选、幂等键、手动队列和状态记录方法；默认只做匿名预检和提交准备，不自动群发。
 - 支持手动输入前后周期的 Search Console、站点分析或推荐访问数据，输出效果判断并把下一轮动作导回诊断。
+- 用本地项目上下文保存业务目标、受众、市场、品牌和转化目标，避免每次重复解释背景。
+- 导入 CSV/JSON/Markdown 关键词机会数据，做聚类、目标页面映射、未分配词和关键词蚕食检查。
+- 用 `geo_coach` 根据当前输入判断下一步，不把工作流变成审批分工。
+- 支持竞争对手差距、外链画像、有限同源站点审计和手动 Prompt 引用证据复盘。
 - 核心分析在本地完成，公开 URL 通过 Harness 官方 `ctx.web` 能力读取，不依赖 GEO-PRO。
 
 插件采用本地优先策略，不会使用 Cookie 或账号凭据。私有账号主页和需要 JavaScript 渲染的页面，请先导出为 Markdown/HTML 快照，再放入 `defaultRoot` 内分析。
@@ -46,7 +50,7 @@
 | `geo_audit_note` | 审计单个 Markdown 笔记 |
 | `geo_audit_vault` | 扫描整个知识库 |
 | `geo_project_report` | 生成结构化项目报告 |
-| `geo_workflow` | 从 URL/快照完成 Google 标准检查、私有知识库关键词规划和内容生产规划 |
+| `geo_workflow` | 从 URL/快照完成 Google 标准检查、私有知识库关键词规划和内容生产规划；可选接入本地机会库 |
 | `geo_content_brief` | 生成内容 Brief |
 | `geo_source_check` | 检查引用和来源可信度 |
 | `geo_preview_content` | 预览完整 Markdown 替换 |
@@ -54,7 +58,15 @@
 | `geo_backlink_plan` | 从候选资源中筛选外链/产品发现渠道，预检入口并生成手动提交包 |
 | `geo_backlink_record` | 记录用户已完成的提交、审核、发布或结果不明状态 |
 | `geo_backlink_audit` | 汇总外链记录、待跟进项、重复键和数据质量问题 |
-| `geo_effect_review` | 手动输入前后周期数据，判断改善/下降/混合/无法判断，并返回下一轮诊断动作 |
+| `geo_effect_review` | 手动输入前后周期和查询/页面行，识别第二页、低 CTR、收录和蚕食机会 |
+| `geo_project_context` | 读取或安全写入本地业务、受众、市场和品牌上下文 |
+| `geo_keyword_import` | 导入 CSV/JSON/Markdown 关键词机会库 |
+| `geo_keyword_opportunities` | 聚类、页面映射、未分配词和关键词蚕食检查 |
+| `geo_coach` | 根据项目状态给出当前最有价值的下一步 |
+| `geo_competitor_gap` | 对比用户提供的竞争对手主题、关键词和页面差距 |
+| `geo_backlink_profile` | 复盘用户导入的 broken/lost/nofollow/risky 外链信号 |
+| `geo_site_audit` | 对公开站点做有限页数、同源、匿名 HTML 审计 |
+| `geo_prompt_review` | 复盘手动采集的模型答案、品牌提及和引用 URL |
 
 ## 用户与企业痛点
 
@@ -112,7 +124,8 @@ dsh plugin --profile default add github:winyh/dsh-geo
 2. 在 `dsh-geo` Bundle 配置中设置 `defaultRoot`，这是插件允许读写的唯一目录。
 3. 执行 `dsh web` 启动或重启 Harness。
 4. 先发送“检查根目录”的请求。
-5. 对一篇内容运行 `geo_workflow`，第一次保持只读，不要直接写文件。
+5. 用 `geo_project_context` 记录目标、受众、语言/地区、品牌和 canonical domain。
+6. 对一篇内容运行 `geo_workflow`，第一次保持只读，不要直接写文件。
 
 最小配置如下：
 
@@ -131,6 +144,8 @@ defaultRoot: "<your-knowledge-base-root>"
 | 一篇已有 Markdown 笔记 | `geo_audit_note` 或 `geo_workflow` | 找出有证据的问题和最高优先级行动 |
 | 整个 Markdown 知识库 | `geo_audit_vault` 或 `geo_project_report` | 找治理缺口并排出优先处理文件 |
 | 还没有成稿，只有主题或旧内容 | `geo_content_brief` | 生成意图、结构、问题和来源缺口 |
+| 有 Search Console/关键词工具导出 | `geo_keyword_import` → `geo_keyword_opportunities` | 导入机会、聚类并分配唯一目标页面 |
+| 不确定当前该做什么 | `geo_coach` | 返回唯一的当前步骤和可复制请求 |
 | 已经有一版修改方案 | 先用 `geo_preview_content` | 先审阅 diff，再明确要求写回 |
 
 ### 完整 SEO/GEO/AEO 执行流程
@@ -145,7 +160,9 @@ defaultRoot: "<your-knowledge-base-root>"
 5. 生产或重写内容：保留事实、来源和有价值的内部链接。
 6. 验证结构、引用、链接、可回答性和仍未确认的未知项。
 7. 预览 Markdown diff，明确确认后安全写回，再重新审计当前文件。
-8. 可选做外链/产品发现分发：先筛选和预检候选，再由用户在平台原生页面手动提交，最后记录真实结果。
+8. 用同口径数据做效果复盘：重点看第二页机会、低 CTR、索引线索和关键词蚕食。
+9. 可选做外链/产品发现分发：先筛选和预检候选，再由用户在平台原生页面手动提交，最后记录真实结果。
+10. 回到下一轮诊断；手动循环即可，不要求自动化。
 
 插件不会编造搜索量、排名难度或流量。`qualitative` 表示公开搜索提供了定性主题信号；`seed-only` 表示基于本地来源和种子词完成规划，同时为了隐私没有把本地内容词发送到公开搜索。
 
@@ -166,6 +183,32 @@ defaultRoot: "<your-knowledge-base-root>"
 | 9. 复查迭代 | 写回后的当前文件 | 前后对比和下一轮清单 | 高优先级问题有结果，未完成项有下一步 |
 
 如果某一步没有完成，不要跳到“直接发布”：按 `sop.steps[n].nextAction` 继续即可。
+
+### 建议的项目文件
+
+```text
+project-context.json                 # 业务目标、受众、市场、品牌和页面目标
+seo/keyword-opportunities.json       # 外部导入的关键词机会、页面映射和状态
+backlinks/campaign.json              # 用户手动完成的外链/产品发现结果
+```
+
+如果目录不存在，先在 `defaultRoot` 下创建目录；插件只负责受边界保护的文件读写。关键词文件可以来自 Search Console、Ads、关键词工具或人工研究；缺失的搜索量、难度和 CPC 保持为空，不由插件估算。
+
+### 诊断—生产—评估—再诊断循环
+
+```text
+geo_project_context
+  → geo_workflow / geo_audit_note
+  → geo_keyword_import → geo_keyword_opportunities
+  → 生成内容 Brief 与 Markdown 草稿
+  → geo_preview_content → geo_apply_content
+  → geo_source_check + geo_audit_note
+  → geo_effect_review（baseline/current + rows）
+  → geo_coach
+  → 下一轮 geo_workflow
+```
+
+`geo_effect_review.rows` 可以包含 query、page、impressions、clicks、ctrPercent、averagePosition、indexed。它会把可执行机会列出来，但不把启发式阈值包装成行业基准；真实收录和效果仍需外部数据源证明。
 
 ### 外链与产品发现分支 SOP
 
@@ -221,6 +264,31 @@ geo_backlink_plan
 请判断变化，并给出下一轮诊断动作；不要把变化归因给单一动作。
 ```
 
+关键词机会导入：
+
+```text
+请把我提供的 Search Console CSV 导入 seo/keyword-opportunities.json，保留真实字段，缺失搜索量不要估算；然后输出聚类、未分配关键词和关键词蚕食风险。
+```
+
+项目下一步路由：
+
+```text
+请运行 geo_coach。项目上下文是 project-context.json，关键词文件是 seo/keyword-opportunities.json，来源是 snapshots/product.html；根据当前状态只给我下一步最有价值的动作和可复制请求。
+```
+
+竞争对手差距：
+
+```text
+请运行 geo_competitor_gap。只使用我提供的目标和竞争对手关键词、主题、页面清单；输出值得研究的缺口，不推断流量和排名。
+```
+
+有限站点审计和答案证据复盘：
+
+```text
+请对 https://example.com 运行 geo_site_audit，最多 10 页、深度 1，只做匿名同源 HTML 审计。
+请运行 geo_prompt_review，比较我手动采集的多个模型答案、品牌提及和引用 URL；不要声称覆盖所有模型。
+```
+
 ### 如何读懂结果
 
 `geo_workflow` 会把来源、诊断、关键词、Brief、生产计划和写回状态放在一个结果里。建议按下面顺序阅读：
@@ -231,9 +299,11 @@ geo_backlink_plan
 | `status` | 流程是否完成 | `partial` 时，先处理访问、截断或数据质量问题 |
 | `audit` | SEO/GEO/AEO 分数、证据和发现项 | 先处理有证据支持且影响最大的发现 |
 | `keywordPlan` | 主查询、次级主题、问题词和实体 | 把词分配到有用章节，不要机械堆词 |
+| `keywordOpportunities` | 外部导入的主题簇、目标页面、未分配词和蚕食 | 先处理页面映射，再开始生产 |
 | `contentBrief` | 受众、意图、大纲、FAQ 和来源缺口 | 把它当作写作规格，而不是直接发布的成稿 |
 | `productionPlan` | 诊断、关键词映射、写作、验证四阶段 | 按顺序执行，并记录未知项 |
 | `sop` | 9 步内容 SOP、当前步骤、完成标准和下一步 | 优先执行 `currentStep`，内容写回后可进入外链分支 |
+| `projectContext` | 业务背景是否完整以及缺少哪些字段 | 补齐上下文后再把内容建议当成项目决策依据 |
 | `writeback` | 只读、预览或写回状态 | 任何改动都先看 diff |
 
 ### 可直接复制的请求
@@ -250,6 +320,7 @@ geo_backlink_plan
 请对 https://example.com 执行 geo_workflow。
 目标：提升产品教育类的有效访问。
 受众：第一次评估产品的人。
+关键词机会文件：seo/keyword-opportunities.json。
 种子关键词：产品教育、产品试用。
 返回 SEO/GEO/AEO 诊断、定性关键词地图、内容 Brief 和四阶段生产计划。不要写入文件。
 ```
@@ -359,7 +430,7 @@ dsh plugin --profile default add ./dsh-geo
 ```
 
 ```text
-请对 https://example.com 执行 geo_workflow。使用当前配置知识库中的相关笔记作为私有上下文，把来源证据、Google 标准警告和关键词地图合并到内容生产输入中。不要写入文件。
+请对 https://example.com 执行 geo_workflow。使用当前配置知识库中的相关笔记和 seo/keyword-opportunities.json 作为私有上下文，把来源证据、Google 标准警告和关键词地图合并到内容生产输入中。不要写入文件。
 ```
 
 如果只想分析一个维度，可以指定 `focus=seo`、`focus=geo` 或 `focus=aeo`。

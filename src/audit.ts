@@ -1,7 +1,7 @@
 import type { AuditFinding, AuditResult, ContentBrief, NoteSnapshot, Pillar, Severity } from './types.js'
 import { buildSeoStandardReport, type SeoAuditContext } from './seo.js'
 
-export const AUDIT_RULE_VERSION = '0.3.0'
+export const AUDIT_RULE_VERSION = '0.4.0'
 
 const severityByImpact: Array<[number, Severity]> = [
   [18, 'critical'],

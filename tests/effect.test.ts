@@ -24,4 +24,19 @@ describe('manual effect review', () => {
     expect(review.dataQuality).toBe('insufficient')
     expect(review.nextActions.join('\n')).toContain('补充')
   })
+
+  it('routes query-level opportunities and catches malformed metrics', () => {
+    const review = buildEffectReview({
+      target: 'guide',
+      baseline: { period: 'before', source: 'GSC', impressions: 100, clicks: 5 },
+      current: { period: 'after', source: 'GSC', impressions: 200, clicks: 10 },
+      rows: [
+        { query: 'seo guide', page: '/guide', impressions: 500, clicks: 4, ctrPercent: 0.8, averagePosition: 12 },
+        { query: 'seo guide', page: '/compare', impressions: 50, clicks: 60, ctrPercent: 120, averagePosition: 5 },
+        { query: 'not indexed', page: '/new', indexed: false, indexNote: 'URL inspection: not indexed' },
+      ],
+    })
+    expect(review.opportunities.map((item) => item.type)).toEqual(expect.arrayContaining(['striking-distance', 'low-ctr', 'indexing', 'cannibalization']))
+    expect(review.anomalies.join('\n')).toContain('clicks 大于 impressions')
+  })
 })
