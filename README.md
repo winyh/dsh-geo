@@ -2,6 +2,8 @@
 
 > English | [中文](./README.zh.md)
 
+`dsh-geo` 是“生成式引擎优化” DeepSeek Harness Bundle，为 Markdown 知识库提供可解释的 SEO、GEO 和 AEO 工具。
+
 `dsh-geo` is a DeepSeek Harness bundle that gives the agent explainable SEO, GEO and AEO tools for Markdown knowledge bases.
 
 > Technical package ID: `dsh-geo` · DeepSeek Harness plugin for SEO, GEO and AEO
