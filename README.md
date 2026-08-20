@@ -19,6 +19,8 @@
 - Map the available source to a Google Search Essentials checklist: people-first content, topic language, title/description, crawlable links, HTTPS, canonical/robots signals, structured data, image alt and mobile viewport.
 - Use related local knowledge-base titles, headings, entities and queries as a private keyword/content input dimension.
 - Preview or apply a complete Markdown replacement, including safe creation of a new note inside `defaultRoot`.
+- Incorporate the backlink_skills approach to candidate resources, quality gates, idempotency keys, manual queues and truthful status records; default behavior is read-only preflight and submission preparation, not mass posting.
+- Compare manually supplied before/after Search Console, site-analytics or referral snapshots and route the next cycle back to diagnosis.
 
 The plugin is local-first. Core analysis runs through the Harness filesystem service. Public URLs use the official anonymous `ctx.web` fetch seam; cookies and credentials are never used. Private or JavaScript-rendered pages should be exported as Markdown/HTML and analyzed as a local snapshot.
 
@@ -70,6 +72,10 @@ This plugin turns those needs into explainable, local-first checks with evidence
 | `geo_source_check` | Check citations and provenance |
 | `geo_preview_content` | Preview a complete Markdown replacement |
 | `geo_apply_content` | Apply an approved, version-guarded replacement |
+| `geo_backlink_plan` | Filter backlink/product-discovery candidates, preflight public routes and prepare a manual submission pack |
+| `geo_backlink_record` | Record a user-completed submission, review, publication or ambiguous outcome |
+| `geo_backlink_audit` | Summarize campaign records, follow-ups, duplicate keys and data-quality errors |
+| `geo_effect_review` | Compare manually supplied before/after metrics and route the next diagnosis |
 
 ## Install from npm
 
@@ -140,6 +146,7 @@ Use this order for a professional SEO/GEO/AEO job:
 5. Produce or revise content while preserving factual claims and source context.
 6. Verify structure, citations, links, answerability and unknown data.
 7. Preview the Markdown diff, explicitly confirm, apply the guarded write, and re-audit the current file.
+8. Optionally distribute through relevant product-discovery channels: qualify candidates first, submit manually through the platform, then record the truthful outcome.
 
 The plugin does not invent search volume, ranking difficulty or traffic. Treat `qualitative` as topic signals from public search and `seed-only` as a privacy-preserving plan based on the supplied source and seed terms.
 
@@ -161,6 +168,60 @@ The plugin does not invent search volume, ranking difficulty or traffic. Treat `
 
 If a step is not complete, follow `sop.steps[n].nextAction` instead of jumping straight to publication.
 
+### Optional backlink and product-discovery branch
+
+Backlinks are a distribution and discovery activity, not a promise of rankings or a volume target. Use this manual loop after the content baseline and writeback are stable:
+
+```text
+geo_backlink_plan
+  -> read-only relevance, audience, rules, cost, reciprocal-link and verification checks
+  -> user completes the platform's native form manually
+  -> geo_backlink_record
+  -> geo_backlink_audit
+  -> geo_effect_review with manually supplied period data
+  -> observe referral visits, conversions, listing accuracy and survival
+  -> feed the next SEO diagnosis and content iteration
+```
+
+`geo_backlink_plan` uses candidates adapted from the [backlink_skills resource list](https://github.com/flaqai/backlink_skills/blob/main/Free-backlink-list.md) by default and accepts user-supplied URLs. The list is a lead list to re-check, not a claim that a site is open, free, relevant or worth submitting to.
+
+Quality mode handles at most 10 candidates per plan. Batch mode prepares a larger manual queue; it does not imply concurrent submission. The plugin does not log in, receive passwords/Cookies/OTPs, bypass CAPTCHA, or batch-publish articles and community posts. Form interaction must be completed by the user in a browser or platform surface available to Harness.
+
+Minimal flow:
+
+```text
+Create a geo_backlink_plan for my product.
+Website: https://example.com
+Verified product description: ...
+Use quality mode and anonymous preflight only. Do not submit any forms.
+```
+
+After a user completes a platform action:
+
+```text
+Record the result for https://directory.example/listing in backlinks/campaign.json.
+Product URL: https://example.com
+Candidate URL: https://directory.example/submit
+Status: published
+Public evidence: https://directory.example/listing
+Record the actual anchor and rel. Do not store passwords, Cookies, CAPTCHA data or email verification codes.
+```
+
+For the next manual cycle:
+
+```text
+Audit backlinks/campaign.json and list follow-ups, ambiguous outcomes, published listings and duplicate-submission risks.
+```
+
+Manual effect review:
+
+```text
+Run geo_effect_review for https://example.com/guide.
+Baseline: 2026-07, source Search Console, impressions 1000, clicks 40, CTR 4, average position 12, referral visits 20.
+Current: 2026-08, source Search Console, impressions 1400, clicks 70, CTR 5, average position 8, referral visits 35.
+Classify the change and return the next diagnosis actions; do not attribute the change to one action without evidence.
+```
+
 ### Understand the result
 
 `geo_workflow` returns a single structured result. Read it in this order:
@@ -173,7 +234,7 @@ If a step is not complete, follow `sop.steps[n].nextAction` instead of jumping s
 | `keywordPlan` | Primary, secondary, question and entity terms | Map each term to one useful section; do not stuff keywords |
 | `contentBrief` | Audience, intent, outline, FAQs and source gaps | Use it as the writing specification |
 | `productionPlan` | Diagnose, map keywords, draft and verify stages | Complete stages in order and record unknowns |
-| `sop` | Nine-step SOP, current step, completion criteria and next action | Follow `currentStep` and do not skip steps |
+| `sop` | Nine-step content SOP, current step, completion criteria and next action | Follow `currentStep`, then use the optional backlink branch after writeback |
 | `writeback` | Read-only/preview/apply status | Preview and inspect the diff before any file change |
 
 ### Copy-paste prompts

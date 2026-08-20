@@ -17,6 +17,8 @@
 - 将当前来源映射到 Google 搜索要素清单：以用户为中心的内容、主题词、标题/描述、可抓取链接、HTTPS、canonical/robots 信号、结构化数据、图片 alt 和移动端 viewport。
 - 将本地知识库中的相关标题、小标题、实体和主查询作为私有的关键词与内容输入维度。
 - 先显示 diff，再使用版本保护安全写回 Markdown；也支持在根目录内安全创建新笔记。
+- 吸收 `backlink_skills` 的外链候选、质量筛选、幂等键、手动队列和状态记录方法；默认只做匿名预检和提交准备，不自动群发。
+- 支持手动输入前后周期的 Search Console、站点分析或推荐访问数据，输出效果判断并把下一轮动作导回诊断。
 - 核心分析在本地完成，公开 URL 通过 Harness 官方 `ctx.web` 能力读取，不依赖 GEO-PRO。
 
 插件采用本地优先策略，不会使用 Cookie 或账号凭据。私有账号主页和需要 JavaScript 渲染的页面，请先导出为 Markdown/HTML 快照，再放入 `defaultRoot` 内分析。
@@ -49,6 +51,10 @@
 | `geo_source_check` | 检查引用和来源可信度 |
 | `geo_preview_content` | 预览完整 Markdown 替换 |
 | `geo_apply_content` | 应用已审批且版本安全的修改 |
+| `geo_backlink_plan` | 从候选资源中筛选外链/产品发现渠道，预检入口并生成手动提交包 |
+| `geo_backlink_record` | 记录用户已完成的提交、审核、发布或结果不明状态 |
+| `geo_backlink_audit` | 汇总外链记录、待跟进项、重复键和数据质量问题 |
+| `geo_effect_review` | 手动输入前后周期数据，判断改善/下降/混合/无法判断，并返回下一轮诊断动作 |
 
 ## 用户与企业痛点
 
@@ -139,6 +145,7 @@ defaultRoot: "<your-knowledge-base-root>"
 5. 生产或重写内容：保留事实、来源和有价值的内部链接。
 6. 验证结构、引用、链接、可回答性和仍未确认的未知项。
 7. 预览 Markdown diff，明确确认后安全写回，再重新审计当前文件。
+8. 可选做外链/产品发现分发：先筛选和预检候选，再由用户在平台原生页面手动提交，最后记录真实结果。
 
 插件不会编造搜索量、排名难度或流量。`qualitative` 表示公开搜索提供了定性主题信号；`seed-only` 表示基于本地来源和种子词完成规划，同时为了隐私没有把本地内容词发送到公开搜索。
 
@@ -160,6 +167,60 @@ defaultRoot: "<your-knowledge-base-root>"
 
 如果某一步没有完成，不要跳到“直接发布”：按 `sop.steps[n].nextAction` 继续即可。
 
+### 外链与产品发现分支 SOP
+
+外链不是“提交越多越好”，也不是排名保证。它是内容发布后的可选分发支线，建议人工循环：
+
+```text
+geo_backlink_plan
+  → 只读核验受众、相关性、规则、收费、互链和验证要求
+  → 用户在平台原生页面手动完成
+  → geo_backlink_record
+  → geo_backlink_audit
+  → geo_effect_review（手动提供前后周期数据）
+  → 观察推荐访问、转化、条目准确性和存活情况
+  → 下一轮 SEO 诊断与内容迭代
+```
+
+`geo_backlink_plan` 默认使用从 [backlink_skills 外链清单](https://github.com/flaqai/backlink_skills/blob/main/Free-backlink-list.md) 整理的候选资源，也接受用户自己提供的 URL。候选清单只是待核验资料，不代表当前开放、免费、相关或值得提交。
+
+质量模式每轮最多处理 10 个候选；批量模式只负责整理更大的人工队列，不代表并发群发。插件不登录、不接收 Cookie/密码/OTP、不绕过 CAPTCHA，不批量发布文章或社区帖子。目标平台的表单交互需要用户在 Harness 可用的浏览器或平台页面中完成。
+
+建议的最短操作：
+
+```text
+请为“我的产品”制定 geo_backlink_plan。
+官网：https://example.com
+真实产品描述：……
+使用质量模式，先匿名预检候选，不提交任何表单。
+```
+
+用户完成某个平台动作后：
+
+```text
+把 https://directory.example/listing 的结果记录到 backlinks/campaign.json。
+产品 URL：https://example.com
+候选 URL：https://directory.example/submit
+状态：published
+公开证据：https://directory.example/listing
+记录实际 anchor 和 rel，不要写入密码、Cookie、验证码或邮箱验证码。
+```
+
+下一轮检查：
+
+```text
+审计 backlinks/campaign.json，列出待跟进、结果不明、已发布和重复提交风险。
+```
+
+效果复盘：
+
+```text
+请对 https://example.com/guide 执行 geo_effect_review。
+基线：2026-07，来源 Search Console，展现 1000，点击 40，CTR 4，平均排名位置 12，推荐访问 20。
+当前：2026-08，来源 Search Console，展现 1400，点击 70，CTR 5，平均排名位置 8，推荐访问 35。
+请判断变化，并给出下一轮诊断动作；不要把变化归因给单一动作。
+```
+
 ### 如何读懂结果
 
 `geo_workflow` 会把来源、诊断、关键词、Brief、生产计划和写回状态放在一个结果里。建议按下面顺序阅读：
@@ -172,7 +233,7 @@ defaultRoot: "<your-knowledge-base-root>"
 | `keywordPlan` | 主查询、次级主题、问题词和实体 | 把词分配到有用章节，不要机械堆词 |
 | `contentBrief` | 受众、意图、大纲、FAQ 和来源缺口 | 把它当作写作规格，而不是直接发布的成稿 |
 | `productionPlan` | 诊断、关键词映射、写作、验证四阶段 | 按顺序执行，并记录未知项 |
-| `sop` | 9 步 SOP、当前步骤、完成标准和下一步 | 优先执行 `currentStep`，不要跳步 |
+| `sop` | 9 步内容 SOP、当前步骤、完成标准和下一步 | 优先执行 `currentStep`，内容写回后可进入外链分支 |
 | `writeback` | 只读、预览或写回状态 | 任何改动都先看 diff |
 
 ### 可直接复制的请求

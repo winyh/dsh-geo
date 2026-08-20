@@ -5,11 +5,13 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-web'
 import { createContentBrief, auditNote } from './audit.js'
+import { buildBacklinkPlan, extractPreflight, normalizeBacklinkRecord, parseBacklinkRecordFile, recordBacklinkEntry, summarizeBacklinkRecords } from './backlinks.js'
+import { buildEffectReview } from './effect.js'
 import { readNote } from './vault.js'
 import { scanVault, summarizeVault } from './vault.js'
 import { fetchPublicDocument, isPublicUrl, readLocalDocument, type SourceDocument } from './web.js'
 import { buildKeywordPlan, buildProductionPlan, buildSeoSop } from './workflow.js'
-import type { ContentBrief, FileSystemLike, GeoConfig, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
+import type { BacklinkStatus, ContentBrief, FileSystemLike, GeoConfig, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
 
 type AuditFocus = Pillar | 'all'
 
@@ -465,6 +467,200 @@ const sopSchema = {
   },
 } as const
 
+const backlinkCandidateSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true },
+    resource: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        id: { type: 'string', required: true },
+        name: { type: 'string', required: true },
+        url: { type: 'string', required: true },
+        route: { type: 'string', enum: ['product-directory', 'startup-directory', 'developer-community', 'software-directory', 'other'], required: true },
+        audience: { type: 'string', required: true },
+        relevance: { type: 'string', required: true },
+        source: { type: 'string', required: true },
+        historicalNote: { type: 'string' },
+        requiresAccount: { type: 'boolean' },
+      },
+      required: true,
+    },
+    normalizedUrl: { type: 'string', required: true },
+    idempotencyKey: { type: 'string', required: true },
+    status: { type: 'string', enum: ['not-attempted', 'manual-required', 'submitted', 'awaiting-email-verification', 'awaiting-approval', 'published', 'outcome-unknown', 'failed', 'ineligible', 'unavailable'], required: true },
+    qualityGate: { type: 'string', enum: ['not-checked', 'passed', 'failed'], required: true },
+    preflight: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        checked: { type: 'boolean', required: true },
+        statusCode: { type: 'number' },
+        finalUrl: { type: 'string' },
+        title: { type: 'string' },
+        note: { type: 'string', required: true },
+      },
+      required: true,
+    },
+    exclusionReasons: { type: 'array', items: { type: 'string' }, required: true },
+    nextAction: { type: 'string', required: true },
+  },
+  required: true,
+} as const
+
+const backlinkPlanSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    version: { type: 'string', required: true },
+    mode: { type: 'string', enum: ['quality', 'batch'], required: true },
+    status: { type: 'string', enum: ['ready', 'partial'], required: true },
+    product: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        name: { type: 'string', required: true },
+        url: { type: 'string', required: true },
+        canonicalUrl: { type: 'string', required: true },
+      },
+      required: true,
+    },
+    source: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        kind: { type: 'string', enum: ['built-in-catalog', 'user-supplied'], required: true },
+        reference: { type: 'string', required: true },
+        candidateCount: { type: 'number', required: true },
+      },
+      required: true,
+    },
+    candidates: { type: 'array', items: backlinkCandidateSchema, required: true },
+    manualQueue: { type: 'array', items: { type: 'string' }, required: true },
+    excluded: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          url: { type: 'string', required: true },
+          reason: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    submissionPack: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        shortDescription: { type: 'string', required: true },
+        longDescription: { type: 'string', required: true },
+        suggestedAnchor: { type: 'string', required: true },
+        factsToVerify: { type: 'array', items: { type: 'string' }, required: true },
+        prohibitedClaims: { type: 'array', items: { type: 'string' }, required: true },
+      },
+      required: true,
+    },
+    guardrails: { type: 'array', items: { type: 'string' }, required: true },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
+const backlinkRecordResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    version: { type: 'string', required: true },
+    path: { type: 'string', required: true },
+    status: { type: 'string', enum: ['not-attempted', 'manual-required', 'submitted', 'awaiting-email-verification', 'awaiting-approval', 'published', 'outcome-unknown', 'failed', 'ineligible', 'unavailable'], required: true },
+    idempotencyKey: { type: 'string', required: true },
+    recordedAt: { type: 'string', required: true },
+    changed: { type: 'boolean', required: true },
+    evidence: { type: 'array', items: { type: 'string' }, required: true },
+    nextAction: { type: 'string', required: true },
+  },
+} as const
+
+const backlinkAuditSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    path: { type: 'string', required: true },
+    total: { type: 'number', required: true },
+    counts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          status: { type: 'string', enum: ['not-attempted', 'manual-required', 'submitted', 'awaiting-email-verification', 'awaiting-approval', 'published', 'outcome-unknown', 'failed', 'ineligible', 'unavailable'], required: true },
+          count: { type: 'number', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    published: { type: 'array', items: { type: 'string' }, required: true },
+    needsFollowUp: { type: 'array', items: { type: 'string' }, required: true },
+    errors: { type: 'array', items: { type: 'string' }, required: true },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
+const effectSnapshotSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    period: { type: 'string', required: true },
+    source: { type: 'string', required: true },
+    impressions: { type: 'number' },
+    clicks: { type: 'number' },
+    ctrPercent: { type: 'number' },
+    averagePosition: { type: 'number' },
+    conversions: { type: 'number' },
+    indexedPages: { type: 'number' },
+    referralVisits: { type: 'number' },
+    referralConversions: { type: 'number' },
+  },
+  required: true,
+} as const
+
+const effectReviewSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    version: { type: 'string', required: true },
+    target: { type: 'string', required: true },
+    status: { type: 'string', enum: ['improving', 'declining', 'mixed', 'inconclusive'], required: true },
+    baseline: effectSnapshotSchema,
+    current: effectSnapshotSchema,
+    changes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          metric: { type: 'string', required: true },
+          baseline: { type: 'number' },
+          current: { type: 'number' },
+          delta: { type: 'number' },
+          relativeChangePercent: { type: 'number' },
+          direction: { type: 'string', enum: ['up', 'down', 'unchanged', 'unknown'], required: true },
+          interpretation: { type: 'string', required: true },
+        },
+        required: true,
+      },
+      required: true,
+    },
+    dataQuality: { type: 'string', enum: ['comparable', 'partial', 'insufficient'], required: true },
+    nextActions: { type: 'array', items: { type: 'string' }, required: true },
+    limitations: { type: 'array', items: { type: 'string' }, required: true },
+  },
+} as const
+
 const workflowOutputSchema = {
   type: 'object',
   additionalProperties: false,
@@ -721,6 +917,17 @@ async function ensureInsideRoot(fs: FileSystemLike, config: GeoConfig, targetPat
   return scopedTarget
 }
 
+async function readBacklinkRecords(fs: FileSystemLike, path: string, config: GeoConfig, signal?: AbortSignal): Promise<{ path: string; target: unknown; info?: { type: string; size?: number; version: unknown }; entries: ReturnType<typeof parseBacklinkRecordFile> }> {
+  const scopedPath = await ensureInsideRoot(fs, config, path, signal)
+  const target = await fs.resolve(scopedPath, { signal })
+  const info = await fs.stat(target, signal)
+  if (!info) return { path: scopedPath, target, entries: [] }
+  if (info.type !== 'file') throw new Error(`Backlink record path is not a file: ${path}`)
+  if (info.size !== undefined && info.size > config.maxTextChars) throw new Error(`Backlink record exceeds maxTextChars (${config.maxTextChars}): ${path}`)
+  const content = await fs.readText(target, signal)
+  return { path: scopedPath, target, info, entries: parseBacklinkRecordFile(content) }
+}
+
 export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   const fs = fsFrom(ctx)
   const previews = new Map<string, ContentPreview>()
@@ -938,6 +1145,177 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
             : ['The URL itself is read-only. Generate the draft, save/export it to a local Markdown destination, then preview that destination with geo_preview_content.', 'For a private page, keep the exported HTML/Markdown inside defaultRoot; no cookies or credentials are passed to dsh-geo.', 'Apply only after reviewing the diff; geo_apply_content uses a short-lived token and a version guard.'],
         },
       }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_backlink_plan',
+    description: 'Build a quality-gated, manual backlink and product-discovery plan from the bundled candidate catalog or user-supplied URLs. It can anonymously preflight public pages, but it never logs in, submits forms, bypasses CAPTCHA, or changes external sites.',
+    parameters: {
+      productName: { type: 'string', required: true, description: 'Verified public product or company name.' },
+      productUrl: { type: 'string', required: true, description: 'Verified canonical public product URL.' },
+      description: { type: 'string', required: true, description: 'Verified product description used to prepare submission copy; do not include invented claims.' },
+      mode: { type: 'string', enum: ['quality', 'batch'], description: 'quality checks at most 10 candidates per plan; batch can prepare a larger user-supplied queue.' },
+      route: { type: 'string', enum: ['product-directory', 'startup-directory', 'developer-community', 'software-directory', 'other'], description: 'Optional route filter.' },
+      resourceUrls: { type: 'array', items: { type: 'string' }, description: 'Optional candidate URLs. If omitted, use the bundled catalog adapted from backlink_skills.' },
+      maxCandidates: { type: 'integer', description: 'Optional candidate cap. Quality mode is capped at 10.' },
+      verifyResources: { type: 'boolean', description: 'Optional; defaults to true and performs anonymous read-only HTTP preflight.' },
+    },
+    output: {
+      schema: backlinkPlanSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const baseInput = {
+        productName: args.productName.trim(),
+        productUrl: args.productUrl.trim(),
+        description: args.description.trim(),
+        mode: args.mode,
+        route: args.route,
+        resourceUrls: args.resourceUrls,
+        maxCandidates: args.maxCandidates,
+      }
+      if (!baseInput.productName || !baseInput.productUrl || !baseInput.description) throw new Error('productName, productUrl and verified description are required.')
+      let plan = buildBacklinkPlan(baseInput)
+      if (args.verifyResources !== false) {
+        const preflights = []
+        for (const candidate of plan.candidates) {
+          try {
+            const result = await ctx.web.fetch({ url: candidate.normalizedUrl }, exec.signal)
+            preflights.push(extractPreflight(result, `匿名只读预检完成：HTTP ${result.statusCode}。这不是平台提交结果。`, candidate.normalizedUrl))
+          } catch (error) {
+            preflights.push({
+              url: candidate.normalizedUrl,
+              note: `匿名只读预检失败：${error instanceof Error ? error.message : String(error)}。请在浏览器中人工核验，不要直接提交。`,
+            })
+          }
+        }
+        plan = buildBacklinkPlan({ ...baseInput, preflights })
+      }
+      return plan
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_backlink_record',
+    description: 'Record a user-completed backlink or product-directory action in a local JSON campaign file. This does not submit forms or access credentials; it prevents ambiguous outcomes from being retried and keeps a manual audit trail.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'JSON record path inside defaultRoot, for example backlinks/campaign.json.' },
+      productUrl: { type: 'string', required: true, description: 'Canonical product URL used to derive the idempotency key.' },
+      resourceUrl: { type: 'string', required: true, description: 'The candidate resource or submission route URL.' },
+      status: { type: 'string', enum: ['not-attempted', 'manual-required', 'submitted', 'awaiting-email-verification', 'awaiting-approval', 'published', 'outcome-unknown', 'failed', 'ineligible', 'unavailable'], required: true },
+      evidence: { type: 'array', items: { type: 'string' }, description: 'Short, non-sensitive evidence such as a public listing URL, visible receipt text, or an opaque screenshot reference.' },
+      publicUrl: { type: 'string', description: 'Public listing URL after publication, if available.' },
+      anchorText: { type: 'string', description: 'Actual public anchor text, if visible.' },
+      linkRel: { type: 'string', description: 'Actual rel attribute, if visible; do not request a preferred link attribute.' },
+      note: { type: 'string', description: 'Short factual note. Do not include passwords, cookies, OTPs, raw email addresses or session URLs.' },
+    },
+    output: {
+      schema: backlinkRecordResultSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const loaded = await readBacklinkRecords(fs, args.path, config, exec.signal)
+      const entry = normalizeBacklinkRecord({
+        productUrl: args.productUrl,
+        resourceUrl: args.resourceUrl,
+        status: args.status,
+        evidence: args.evidence,
+        publicUrl: args.publicUrl,
+        anchorText: args.anchorText,
+        linkRel: args.linkRel,
+        note: args.note,
+      })
+      const recorded = recordBacklinkEntry(loaded.entries, entry)
+      recorded.result.path = loaded.path
+      if (recorded.result.changed) {
+        const content = JSON.stringify(recorded.entries, null, 2) + '\n'
+        if (content.length > config.maxTextChars) throw new Error(`Backlink record exceeds maxTextChars (${config.maxTextChars}). Use a new campaign file or archive old records.`)
+        const expected = loaded.info ? { kind: 'replaceIfVersion' as const, version: loaded.info.version } : { kind: 'createIfAbsent' as const }
+        await fs.writeText(loaded.target, content, expected, exec.signal)
+      }
+      return recorded.result
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_backlink_audit',
+    description: 'Audit a local backlink campaign record and return manual follow-up items, terminal outcomes and data-quality errors. Reads only.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'JSON record path inside defaultRoot.' },
+    },
+    output: {
+      schema: backlinkAuditSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args, exec) {
+      const loaded = await readBacklinkRecords(fs, args.path, config, exec.signal)
+      const summary = summarizeBacklinkRecords(loaded.entries)
+      const statuses: BacklinkStatus[] = ['not-attempted', 'manual-required', 'submitted', 'awaiting-email-verification', 'awaiting-approval', 'published', 'outcome-unknown', 'failed', 'ineligible', 'unavailable']
+      return {
+        path: loaded.path,
+        total: summary.total,
+        counts: statuses.map((status) => ({ status, count: summary.byStatus[status] })),
+        published: summary.published.map((entry) => entry.publicUrl || entry.resourceUrl),
+        needsFollowUp: summary.needsFollowUp.map((entry) => entry.idempotencyKey),
+        errors: summary.errors,
+        nextActions: [
+          ...(summary.needsFollowUp.length > 0 ? ['先核对提交回执、邮箱和公开页面，再更新 pending 或 outcome-unknown 记录。'] : []),
+          ...(summary.published.length > 0 ? ['把公开条目、推荐访问和转化纳入下一轮手动效果评估。'] : []),
+          ...(summary.errors.length > 0 ? ['修复重复 idempotencyKey 或非法状态后再继续提交。'] : []),
+          ...(summary.total === 0 ? ['先运行 geo_backlink_plan，再在用户完成真实平台动作后记录结果。'] : []),
+        ],
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_effect_review',
+    description: 'Compare two manually supplied SEO, site-analytics or referral snapshots and return a cautious effect review plus the next diagnosis action. Reads only; it does not connect to external analytics accounts or invent missing metrics.',
+    parameters: {
+      target: { type: 'string', required: true, description: 'Page, campaign or product being evaluated.' },
+      baseline: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          period: { type: 'string', required: true, description: 'Baseline period, using the same timezone and device/region scope as current.' },
+          source: { type: 'string', required: true, description: 'Data source, such as Search Console export or site analytics.' },
+          impressions: { type: 'number' },
+          clicks: { type: 'number' },
+          ctrPercent: { type: 'number', description: 'CTR as percentage points, for example 2.4 means 2.4%.' },
+          averagePosition: { type: 'number' },
+          conversions: { type: 'number' },
+          indexedPages: { type: 'number' },
+          referralVisits: { type: 'number' },
+          referralConversions: { type: 'number' },
+        },
+        required: true,
+      },
+      current: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          period: { type: 'string', required: true },
+          source: { type: 'string', required: true },
+          impressions: { type: 'number' },
+          clicks: { type: 'number' },
+          ctrPercent: { type: 'number' },
+          averagePosition: { type: 'number' },
+          conversions: { type: 'number' },
+          indexedPages: { type: 'number' },
+          referralVisits: { type: 'number' },
+          referralConversions: { type: 'number' },
+        },
+        required: true,
+      },
+    },
+    output: {
+      schema: effectReviewSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args) {
+      if (!args.target.trim() || !args.baseline.period.trim() || !args.current.period.trim()) throw new Error('target, baseline.period and current.period are required.')
+      return buildEffectReview({ target: args.target.trim(), baseline: args.baseline, current: args.current })
     },
   }))
 

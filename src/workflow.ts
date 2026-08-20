@@ -265,7 +265,7 @@ export function buildSeoSop(input: {
       : 'draft'
   return {
     name: '标准 SEO/GEO/AEO 内容生产 SOP',
-    version: '0.2.0',
+    version: '0.3.0',
     mode: 'read-only',
     currentStep,
     steps: [
@@ -370,7 +370,7 @@ export function buildSeoSop(input: {
         inputs: ['写回后的当前文件', '原始基线审计'],
         outputs: ['前后分数、发现项变化、来源变化、剩余工作清单。'],
         completionCriteria: ['高优先级问题有明确结果；未完成项有下一次迭代动作。'],
-        nextAction: '使用 Search Console、PageSpeed 或站点分析补充插件无法证明的部署级数据。',
+        nextAction: '使用 Search Console、PageSpeed 或站点分析补充插件无法证明的部署级数据；如需产品发现分发，再运行 geo_backlink_plan，完成手动提交后记录结果。',
       },
     ],
     completionCriteria: [
@@ -379,11 +379,13 @@ export function buildSeoSop(input: {
       '主查询、关键词地图、内容 Brief 和四类生产输入齐全。',
       '草稿通过 SEO/GEO/AEO、来源和结构复查。',
       '写回前检查 diff，写回后重新审计。',
+      '如启用外链分支，候选经过质量核验，平台动作由用户手动完成，结果和公开证据已记录。',
       'Sitemap、Search Console、Core Web Vitals、真实收录和流量等外部数据另行验证。',
     ],
     limitations: [
       '当前结果是只读 SOP 和生产契约；插件不会在没有 Harness 模型参与的情况下自行生成事实性文章。',
       '搜索量、排名难度、收录、点击和转化不由插件编造，必须使用独立数据源。',
+      '外链工具只做匿名预检、提交准备和结果记录，不替代平台原生登录/表单，也不绕过验证码或安全验证。',
     ],
   }
 }

@@ -245,6 +245,128 @@ export interface SeoSop {
   limitations: string[]
 }
 
+export type BacklinkMode = 'quality' | 'batch'
+
+export type BacklinkRoute = 'product-directory' | 'startup-directory' | 'developer-community' | 'software-directory' | 'other'
+
+export type BacklinkStatus =
+  | 'not-attempted'
+  | 'manual-required'
+  | 'submitted'
+  | 'awaiting-email-verification'
+  | 'awaiting-approval'
+  | 'published'
+  | 'outcome-unknown'
+  | 'failed'
+  | 'ineligible'
+  | 'unavailable'
+
+export type BacklinkQualityGate = 'not-checked' | 'passed' | 'failed'
+
+export interface BacklinkResource {
+  id: string
+  name: string
+  url: string
+  route: BacklinkRoute
+  audience: string
+  relevance: string
+  source: string
+  historicalNote?: string
+  requiresAccount?: boolean
+}
+
+export interface BacklinkCandidate {
+  id: string
+  resource: BacklinkResource
+  normalizedUrl: string
+  idempotencyKey: string
+  status: BacklinkStatus
+  qualityGate: BacklinkQualityGate
+  preflight: {
+    checked: boolean
+    statusCode?: number
+    finalUrl?: string
+    title?: string
+    note: string
+  }
+  exclusionReasons: string[]
+  nextAction: string
+}
+
+export interface BacklinkPlan {
+  version: string
+  mode: BacklinkMode
+  status: 'ready' | 'partial'
+  product: {
+    name: string
+    url: string
+    canonicalUrl: string
+  }
+  source: {
+    kind: 'built-in-catalog' | 'user-supplied'
+    reference: string
+    candidateCount: number
+  }
+  candidates: BacklinkCandidate[]
+  manualQueue: string[]
+  excluded: Array<{ url: string; reason: string }>
+  submissionPack: {
+    shortDescription: string
+    longDescription: string
+    suggestedAnchor: string
+    factsToVerify: string[]
+    prohibitedClaims: string[]
+  }
+  guardrails: string[]
+  nextActions: string[]
+}
+
+export interface BacklinkRecordResult {
+  version: string
+  path: string
+  status: BacklinkStatus
+  idempotencyKey: string
+  recordedAt: string
+  changed: boolean
+  evidence: string[]
+  nextAction: string
+}
+
+export type EffectReviewStatus = 'improving' | 'declining' | 'mixed' | 'inconclusive'
+
+export interface EffectSnapshot {
+  period: string
+  source: string
+  impressions?: number
+  clicks?: number
+  ctrPercent?: number
+  averagePosition?: number
+  conversions?: number
+  indexedPages?: number
+  referralVisits?: number
+  referralConversions?: number
+}
+
+export interface EffectReview {
+  version: string
+  target: string
+  status: EffectReviewStatus
+  baseline: EffectSnapshot
+  current: EffectSnapshot
+  changes: Array<{
+    metric: string
+    baseline?: number
+    current?: number
+    delta?: number
+    relativeChangePercent?: number
+    direction: 'up' | 'down' | 'unchanged' | 'unknown'
+    interpretation: string
+  }>
+  dataQuality: 'comparable' | 'partial' | 'insufficient'
+  nextActions: string[]
+  limitations: string[]
+}
+
 export interface ScanLimits {
   maxFiles: number
   maxFileBytes: number
