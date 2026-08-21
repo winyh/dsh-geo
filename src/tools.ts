@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { geoResultEnvelope, geoResultSchema } from './output.js'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-web'
@@ -1079,6 +1080,37 @@ async function readKeywordFile(fs: FileSystemLike, path: string, config: GeoConf
 export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   const fs = fsFrom(ctx)
   const previews = new Map<string, ContentPreview>()
+
+  ctx.tools.register(defineTool({
+    name: 'geo_contract_wrap',
+    description: 'Normalize a GEO result or imported artifact into the shared six-plugin result envelope. This is a read-only contract adapter and does not validate the underlying analysis.',
+    parameters: {
+      resultJson: { type: 'string', required: true, description: 'JSON result or artifact to wrap.' },
+      artifactType: { type: 'string', description: 'Optional artifact type used in the lineage entry.' },
+      source: { type: 'string', description: 'Optional source path, URL or upstream plugin identifier.' },
+    },
+    output: {
+      schema: geoResultSchema,
+      render: (_args, value) => renderValue(value, config.maxResultChars),
+    },
+    async execute(args) {
+      let data: unknown
+      try {
+        data = JSON.parse(args.resultJson) as unknown
+      } catch (error) {
+        throw new Error(`resultJson must be valid JSON: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      const warnings = typeof data === 'object' && data !== null && 'warnings' in data && Array.isArray(data.warnings)
+        ? data.warnings.filter((item): item is string => typeof item === 'string')
+        : []
+      return geoResultEnvelope({
+        data: jsonResult(data),
+        warnings,
+        lineage: args.source ? [{ source: args.source, ...(args.artifactType ? { fields: [`artifactType:${args.artifactType}`] } : {}) }] : [],
+        nextActions: ['保留原始结果和来源；下游插件只消费结构化字段，不把 SEO/GEO 分数直接当作业务结果。'],
+      })
+    },
+  }))
 
   const prunePreviews = () => {
     const now = Date.now()

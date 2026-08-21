@@ -6,6 +6,8 @@
 
 `dsh-geo` is a DeepSeek Harness bundle that gives the agent explainable SEO, GEO and AEO tools for Markdown knowledge bases.
 
+Public six-plugin collaboration contract: [SUITE.md](https://github.com/winyh/dsh-business/blob/main/SUITE.md).
+
 > Technical package ID: `dsh-geo` · DeepSeek Harness plugin for SEO, GEO and AEO
 
 ## Plugin Positioning and Collaboration Navigation

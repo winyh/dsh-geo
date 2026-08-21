@@ -4,6 +4,8 @@
 
 `dsh-geo` 是“生成式引擎优化” DeepSeek Harness Bundle，为 Markdown 知识库提供可解释的 SEO、GEO 和 AEO 工具。
 
+六插件公开协作契约：[SUITE.md](https://github.com/winyh/dsh-business/blob/main/SUITE.md)。
+
 ## 插件定位：营销阶段的内容与可发现性层
 
 `dsh-geo` 负责营销阶段的内容、SEO/GEO/AEO 和搜索/答案引擎可发现性：把产品事实、商业价值和用户语言转成可被目标用户理解、信任和引用的内容资产。
