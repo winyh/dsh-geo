@@ -24,7 +24,9 @@ export function apply(ctx: Context, config: GeoConfig): void {
   // snapshot inputs, so cookies and credentials never enter this plugin.
   if (!ctx.registry.has(webFetchHttp)) {
     void ctx.plugin(webFetchHttp, {
-      maxBodyChars: Math.min(config.maxTextChars, 100_000),
+      // Keep the shared provider defaults identical across dsh-idea, dsh-product and dsh-geo.
+      // This prevents plugin load order from changing the provider's limits.
+      maxBodyChars: 100_000,
       maxResponseBytes: 5_000_000,
       timeoutMs: 30_000,
       maxRedirects: 5,
