@@ -1,0 +1,35 @@
+{
+  "name": "dsh-geo",
+  "version": "0.4.0",
+  "description": "Evidence-backed SEO, GEO and AEO analysis, content planning and discoverability workflows for Markdown knowledge bases.",
+  "author": {
+    "name": "Local developer"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "seo",
+    "geo",
+    "aeo",
+    "content-discoverability",
+    "markdown"
+  ],
+  "interface": {
+    "displayName": "生成式引擎优化",
+    "shortDescription": "面向 Markdown 知识库的 SEO、GEO、AEO 审计与内容可发现性工具。",
+    "longDescription": "dsh-geo provides explainable SEO, GEO and AEO audits, content briefs, keyword planning, backlink evidence reviews and guarded Markdown writeback for local Markdown knowledge bases. It does not perform unrestricted crawling, ranking manipulation or live submissions.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Analyze",
+      "Research",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "审计这个 Markdown 知识库的 SEO、GEO 和 AEO 问题，并指出证据与下一步。",
+      "把产品事实、用户问题和来源整理成可验证的内容计划。",
+      "预览一次 Markdown 内容更新，确认后再安全写回。"
+    ]
+  }
+}
