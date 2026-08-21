@@ -8,6 +8,12 @@
 
 Public six-plugin collaboration contract: [SUITE.md](https://github.com/winyh/dsh-business/blob/main/SUITE.md).
 
+## 协作可靠与增长测量
+
+`geo_artifact_review` 校验 GEO/SEO/AEO 工件；`geo_growth_measurement_plan` 将内容、渠道和目标指标绑定起来，但不会把相关性直接当成因果。
+
+`geo_artifact_review` validates GEO/SEO/AEO artifacts; `geo_growth_measurement_plan` binds content and channels to target metrics without treating correlation as causation.
+
 > Technical package ID: `dsh-geo` · DeepSeek Harness plugin for SEO, GEO and AEO
 
 ## Plugin Positioning and Collaboration Navigation

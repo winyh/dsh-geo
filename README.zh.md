@@ -6,6 +6,8 @@
 
 六插件公开协作契约：[SUITE.md](https://github.com/winyh/dsh-business/blob/main/SUITE.md)。
 
+`geo_artifact_review` 校验 GEO/SEO/AEO 工件；`geo_growth_measurement_plan` 把内容、渠道和目标指标绑定起来，但不把相关性直接当成因果。
+
 ## 插件定位：营销阶段的内容与可发现性层
 
 `dsh-geo` 负责营销阶段的内容、SEO/GEO/AEO 和搜索/答案引擎可发现性：把产品事实、商业价值和用户语言转成可被目标用户理解、信任和引用的内容资产。

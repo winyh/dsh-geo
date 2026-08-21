@@ -17,6 +17,7 @@ import { scanVault, summarizeVault } from './vault.js'
 import { extractTechnicalSeo, fetchPublicDocument, isPublicUrl, readLocalDocument, type SourceDocument } from './web.js'
 import { buildKeywordPlan, buildProductionPlan, buildSeoSop } from './workflow.js'
 import type { BacklinkStatus, CoachResult, ContentBrief, FileSystemLike, GeoConfig, KeywordOpportunity, KeywordOpportunityMap, KeywordPlan, Pillar, VaultAuditResult } from './types.js'
+import { appendArtifactAudit, attachArtifactMetadata, reviewArtifact } from './artifacts.js'
 
 type AuditFocus = Pillar | 'all'
 
@@ -1104,7 +1105,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         ? data.warnings.filter((item): item is string => typeof item === 'string')
         : []
       return geoResultEnvelope({
-        data: jsonResult(data),
+        data: jsonResult(attachArtifactMetadata(data, { staleAfterDays: 30 })),
         warnings,
         lineage: args.source ? [{ source: args.source, ...(args.artifactType ? { fields: [`artifactType:${args.artifactType}`] } : {}) }] : [],
         nextActions: ['保留原始结果和来源；下游插件只消费结构化字段，不把 SEO/GEO 分数直接当作业务结果。'],
@@ -2087,6 +2088,43 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'geo_growth_measurement_plan',
+    description: 'Create a measurable GEO-to-growth handoff for one content or search asset. It defines the target metric and window but never claims causality.',
+    parameters: {
+      contentId: { type: 'string', required: true, description: 'Stable content, page or asset ID.' },
+      channel: { type: 'string', required: true, description: 'Channel such as organic-search, ai-answer, referral or directory.' },
+      targetMetric: { type: 'string', required: true, description: 'Metric to observe, such as qualifiedSignup, activation or paidConversion.' },
+      query: { type: 'string', description: 'Primary query or topic.' },
+      audience: { type: 'string', description: 'Target audience or segment.' },
+      publishAt: { type: 'string', required: true, description: 'ISO timestamp or date when the asset became observable.' },
+      baselineWindow: { type: 'string', required: true, description: 'Baseline window, for example 2026-07-01/2026-07-31.' },
+      source: { type: 'string', description: 'Source note, URL or content brief.' },
+    },
+    output: { schema: geoResultSchema, render: (_args, value) => renderValue(value, config.maxResultChars), presentationMeta },
+    async execute(args) {
+      const plan = attachArtifactMetadata({ artifactType: 'geo-growth-measurement-plan', generatedAt: new Date().toISOString(), contentId: args.contentId.trim(), channel: args.channel.trim(), targetMetric: args.targetMetric.trim(), ...(args.query?.trim() ? { query: args.query.trim() } : {}), ...(args.audience?.trim() ? { audience: args.audience.trim() } : {}), publishAt: args.publishAt.trim(), baselineWindow: args.baselineWindow.trim(), ...(args.source?.trim() ? { source: args.source.trim() } : {}), warnings: ['此计划只建立可观测关系；没有实验设计或对照组时，不得宣称因果。'], nextActions: ['在增长数据中用相同 contentId/channel 记录观察窗口，再交给 growth_attribution_review。'] }, { staleAfterDays: 90 })
+      return geoResultEnvelope({ data: jsonResult(plan), lineage: args.source?.trim() ? [{ source: args.source.trim() }] : [], nextActions: plan.nextActions })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_artifact_review',
+    description: 'Validate a GEO/SEO/AEO artifact before using it as a growth input. Checks schema, stable ID and freshness without changing files.',
+    parameters: {
+      artifactJson: { type: 'string', required: true, description: 'JSON returned by a plugin tool.' },
+      expectedType: { type: 'string', description: 'Optional expected artifactType.' },
+    },
+    output: { schema: geoResultSchema, render: (_args, value) => renderValue(value, config.maxResultChars), presentationMeta },
+    async execute(args) {
+      let value: unknown
+      try { value = JSON.parse(args.artifactJson) as unknown } catch (error) { throw new Error(`artifactJson must be valid JSON: ${error instanceof Error ? error.message : String(error)}`) }
+      const data = typeof value === 'object' && value !== null && 'data' in value ? (value as { data: unknown }).data : value
+      const review = reviewArtifact(data, args.expectedType?.trim() || undefined)
+      return geoResultEnvelope({ data: jsonResult({ artifactType: 'geo-artifact-review', generatedAt: new Date().toISOString(), ...review }), nextActions: review.nextActions })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'geo_apply_content',
     description: 'Apply a previously previewed Markdown replacement after explicit approval. Requires a valid preview token, can reuse its bound content when content is omitted, and refuses stale files.',
     parameters: {
@@ -2130,6 +2168,8 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         await fs.writeText(target, content, { kind: 'replaceIfVersion', version: preview.version }, exec.signal)
       }
       preview.used = true
+      let audit: unknown
+      try { audit = await appendArtifactAudit(fs, config.defaultRoot, { action: 'apply', path, beforeHash: preview.oldHash, afterHash: contentHash(content), approved: true }, exec.signal) } catch (error) { audit = { status: 'audit-failed', warning: error instanceof Error ? error.message : String(error) } }
       return {
         status: 'applied' as const,
         path,
@@ -2140,6 +2180,7 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
         changed: true,
         applied: true,
         guarded: true,
+        audit,
       }
     },
   }))

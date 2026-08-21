@@ -5,3 +5,4 @@ docs/
 .env
 .DS_Store
 *.log
+.dsh-*-audit.jsonl
