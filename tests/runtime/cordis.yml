@@ -1,0 +1,13 @@
+- id: fixture-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+- id: fixture-tools
+  name: '@deepseek-ai/dsh-tools'
+- id: fixture-fs
+  name: '@deepseek-ai/dsh-fs-local'
+- id: fixture-web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    fetchProvider: fixture
+    searchProvider: fixture
+- id: fixture-web-provider
+  name: './web-provider.mjs'

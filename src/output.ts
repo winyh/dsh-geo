@@ -30,4 +30,4 @@ export const geoResultSchema = {
 export function geoResultEnvelope(input: { data: JsonValue; warnings?: string[]; assumptions?: string[]; lineage?: GeoResultLineage[]; nextActions?: string[] }): GeoResultEnvelope {
   return { schemaVersion: '1.0', ok: true, data: input.data, warnings: input.warnings ?? [], assumptions: input.assumptions ?? [], lineage: [...(input.lineage ?? [])] as unknown as Array<Record<string, JsonValue>>, nextActions: input.nextActions ?? [] }
 }
-import type { JsonValue } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'

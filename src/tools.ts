@@ -3,7 +3,7 @@ import { isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { geoResultEnvelope, geoResultSchema } from './output.js'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-web'
 import { createContentBrief, auditNote } from './audit.js'
@@ -53,7 +53,6 @@ const seoStandardSchema = {
           evidence: { type: 'string', required: true },
           recommendation: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -194,7 +193,6 @@ const scoreOutputSchema = {
     aeo: { type: 'number', required: true },
     overall: { type: 'number', required: true },
   },
-  required: true,
 } as const
 
 const vaultOutputSchema = {
@@ -220,7 +218,7 @@ const briefOutputSchema = {
     topic: { type: 'string', required: true },
     intent: { type: 'string', required: true },
     audience: { type: 'string', required: true },
-    scores: scoreOutputSchema,
+    scores: { ...scoreOutputSchema, required: true },
     recommendedTitle: { type: 'string', required: true },
     directAnswer: { type: 'string', required: true },
     outline: { type: 'array', items: { type: 'string' }, required: true },
@@ -387,7 +385,6 @@ const keywordPlanSchema = {
           candidateTerms: { type: 'array', items: { type: 'string' }, required: true },
           excerpt: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -464,7 +461,6 @@ const sopSchema = {
           completionCriteria: { type: 'array', items: { type: 'string' }, required: true },
           nextAction: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -513,7 +509,6 @@ const backlinkCandidateSchema = {
     exclusionReasons: { type: 'array', items: { type: 'string' }, required: true },
     nextAction: { type: 'string', required: true },
   },
-  required: true,
 } as const
 
 const backlinkPlanSchema = {
@@ -554,7 +549,6 @@ const backlinkPlanSchema = {
           url: { type: 'string', required: true },
           reason: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -605,7 +599,6 @@ const backlinkAuditSchema = {
           status: { type: 'string', enum: ['not-attempted', 'manual-required', 'submitted', 'awaiting-email-verification', 'awaiting-approval', 'published', 'outcome-unknown', 'failed', 'ineligible', 'unavailable'], required: true },
           count: { type: 'number', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -631,7 +624,6 @@ const effectSnapshotSchema = {
     referralVisits: { type: 'number' },
     referralConversions: { type: 'number' },
   },
-  required: true,
 } as const
 
 const effectReviewSchema = {
@@ -641,8 +633,8 @@ const effectReviewSchema = {
     version: { type: 'string', required: true },
     target: { type: 'string', required: true },
     status: { type: 'string', enum: ['improving', 'declining', 'mixed', 'inconclusive'], required: true },
-    baseline: effectSnapshotSchema,
-    current: effectSnapshotSchema,
+    baseline: { ...effectSnapshotSchema, required: true },
+    current: { ...effectSnapshotSchema, required: true },
     changes: {
       type: 'array',
       items: {
@@ -657,7 +649,6 @@ const effectReviewSchema = {
           direction: { type: 'string', enum: ['up', 'down', 'unchanged', 'unknown'], required: true },
           interpretation: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -673,7 +664,6 @@ const effectReviewSchema = {
           evidence: { type: 'string', required: true },
           nextAction: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
@@ -715,7 +705,6 @@ const projectContextResultSchema = {
     missingFields: { type: 'array', items: { type: 'string' }, required: true },
     nextActions: { type: 'array', items: { type: 'string' }, required: true },
   },
-  required: true,
 } as const
 
 const keywordImportSchema = {
@@ -730,7 +719,6 @@ const keywordImportSchema = {
     total: { type: 'number', required: true },
     nextActions: { type: 'array', items: { type: 'string' }, required: true },
   },
-  required: true,
 } as const
 
 const keywordOpportunityMapSchema = {
@@ -764,17 +752,15 @@ const coachSchema = {
           path: { type: 'string' },
           note: { type: 'string', required: true },
         },
-        required: true,
       },
       required: true,
     },
     nextActions: { type: 'array', items: { type: 'string' }, required: true },
     suggestedPrompt: { type: 'string', required: true },
   },
-  required: true,
 } as const
 
-const researchJsonSchema = { type: 'json', required: true } as const
+const researchJsonSchema = { type: 'json' } as const
 
 const workflowOutputSchema = {
   type: 'object',
@@ -826,7 +812,6 @@ const workflowOutputSchema = {
               candidateTerms: { type: 'array', items: { type: 'string' }, required: true },
               excerpt: { type: 'string', required: true },
             },
-            required: true,
           },
           required: true,
         },
@@ -835,7 +820,7 @@ const workflowOutputSchema = {
       },
       required: true,
     },
-    projectContext: projectContextResultSchema,
+    projectContext: { ...projectContextResultSchema, required: true },
     audit: auditOutputSchema,
     sop: sopSchema,
     keywordPlan: keywordPlanSchema,
@@ -1753,7 +1738,6 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
             pages: { type: 'array', items: { type: 'string' } },
             notes: { type: 'string' },
           },
-          required: true,
         },
       },
     },
@@ -1791,7 +1775,6 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
             competitor: { type: 'string' },
             capturedAt: { type: 'string' },
           },
-          required: true,
         },
       },
       competitorRows: {
@@ -1804,7 +1787,6 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
             sourceUrl: { type: 'string', required: true },
             referringDomain: { type: 'string' },
           },
-          required: true,
         },
       },
     },
@@ -1900,7 +1882,6 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
             citedUrls: { type: 'array', items: { type: 'string' }, required: true },
             brandMentioned: { type: 'boolean' },
           },
-          required: true,
         },
       },
     },
