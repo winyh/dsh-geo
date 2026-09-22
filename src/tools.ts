@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { handoffParameters, receiveHandoff } from './handoff-receive.js'
 import { geoResultEnvelope, geoResultSchema } from './output.js'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type {} from '@deepseek-ai/dsh-fs'
@@ -2083,8 +2084,20 @@ export function registerGeoTools(ctx: Context, config: GeoConfig): void {
     },
     output: { schema: geoResultSchema, render: (_args, value) => renderValue(value, config.maxResultChars), presentationMeta },
     async execute(args) {
-      const plan = attachArtifactMetadata({ artifactType: 'geo-growth-measurement-plan', generatedAt: new Date().toISOString(), contentId: args.contentId.trim(), channel: args.channel.trim(), targetMetric: args.targetMetric.trim(), ...(args.query?.trim() ? { query: args.query.trim() } : {}), ...(args.audience?.trim() ? { audience: args.audience.trim() } : {}), publishAt: args.publishAt.trim(), baselineWindow: args.baselineWindow.trim(), ...(args.source?.trim() ? { source: args.source.trim() } : {}), warnings: ['此计划只建立可观测关系；没有实验设计或对照组时，不得宣称因果。'], nextActions: ['在增长数据中用相同 contentId/channel 记录观察窗口，再交给 growth_attribution_review。'] }, { staleAfterDays: 90 })
+      const plan = attachArtifactMetadata({ artifactType: 'geo-growth-measurement-plan', handoffFrom: 'dsh-geo', handoffTo: 'dsh-growth', generatedAt: new Date().toISOString(), contentId: args.contentId.trim(), channel: args.channel.trim(), targetMetric: args.targetMetric.trim(), ...(args.query?.trim() ? { query: args.query.trim() } : {}), ...(args.audience?.trim() ? { audience: args.audience.trim() } : {}), publishAt: args.publishAt.trim(), baselineWindow: args.baselineWindow.trim(), ...(args.source?.trim() ? { source: args.source.trim() } : {}), warnings: ['此计划只建立可观测关系；没有实验设计或对照组时，不得宣称因果。'], nextActions: ['在增长数据中用相同 contentId/channel 记录观察窗口，再交给 growth_attribution_review。'] }, { staleAfterDays: 90 })
       return geoResultEnvelope({ data: jsonResult(plan), lineage: args.source?.trim() ? [{ source: args.source.trim() }] : [], nextActions: plan.nextActions })
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'geo_handoff_receive',
+    description: 'Receive a supported upstream artifact with integrity, routing and evidence checks. Produce an owned, dated receipt for one initiative; acceptance is not approval or task completion. Read-only.',
+    parameters: handoffParameters,
+    output: { schema: geoResultSchema, render: (_args, value) => renderValue(value, config.maxResultChars), presentationMeta },
+    async execute(args, exec) {
+      exec.signal.throwIfAborted()
+      const receipt = receiveHandoff(JSON.parse(args.artifactJson) as unknown, args)
+      return geoResultEnvelope({ data: jsonResult(attachArtifactMetadata(receipt, { staleAfterDays: 30 })), warnings: receipt.warnings, nextActions: receipt.nextActions })
     },
   }))
 

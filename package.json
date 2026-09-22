@@ -12,6 +12,7 @@
     }
   },
   "files": [
+    "references/closed-loop.md",
     "lib",
     ".codex-plugin",
     "cordis.patch.yml",
