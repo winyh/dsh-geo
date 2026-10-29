@@ -93,7 +93,7 @@ try {
   const afterUnload = await ctx.get('web').fetch({ url: 'https://example.com/evidence' })
   assert.deepEqual(afterUnload, webRead, 'plugin unload must preserve the profile-owned web provider')
   assert.ok(tools.schemas().every((tool) => !tool.name.startsWith(prefix)), 'unloading must remove all contributed tools')
-  console.log('DSH 0.1.5-rc.2 runtime ok: ' + pkg.name + ' (' + names.length + ' tools; read, validation, cancellation, unload)')
+  console.log('DSH 0.2.1-rc.2 runtime ok: ' + pkg.name + ' (' + names.length + ' tools; read, validation, cancellation, unload)')
 } finally {
   clearTimeout(deadline)
   await ctx.fiber.dispose()
