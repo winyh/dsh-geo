@@ -7,6 +7,6 @@ export default defineConfig({
   dts: true,
   clean: true,
   platform: 'node',
-  target: 'node22',
+  target: 'node24.9',
   external: [/^@deepseek-ai\//],
 })
