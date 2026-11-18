@@ -13,9 +13,29 @@ const METRICS: Array<{ key: MetricKey; label: string; higherIsBetter: boolean }>
   { key: 'referralConversions', label: '推荐转化', higherIsBetter: true },
 ]
 
-function metricValue(snapshot: EffectSnapshot, key: MetricKey): number | undefined {
-  const value = snapshot[key]
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+function invalidMetrics(snapshot: EffectSnapshot, label: string, anomalies: string[]): Set<MetricKey> {
+  const invalid = new Set<MetricKey>()
+  for (const { key } of METRICS) {
+    const value = snapshot[key]
+    if (value === undefined) continue
+    if (!Number.isFinite(value) || value < 0 || (key === 'ctrPercent' && value > 100) || (key === 'averagePosition' && value < 1)) {
+      invalid.add(key)
+      anomalies.push(label + '：' + key + ' 超出有效范围。')
+    }
+  }
+  const { impressions, clicks, ctrPercent } = snapshot
+  if (impressions !== undefined && clicks !== undefined && clicks > impressions) {
+    invalid.add('clicks')
+    invalid.add('impressions')
+    invalid.add('ctrPercent')
+    anomalies.push(label + '：clicks 大于 impressions，请核对汇总数据。')
+  } else if (impressions !== undefined && impressions > 0 && clicks !== undefined && ctrPercent !== undefined
+    && Math.abs(100 * clicks / impressions - ctrPercent) > 0.5) {
+    // Allow CTR rounded to the nearest whole percentage point.
+    invalid.add('ctrPercent')
+    anomalies.push(label + '：CTR 与 clicks / impressions 不一致。')
+  }
+  return invalid
 }
 
 function changePercent(baseline: number, delta: number): number | undefined {
@@ -27,10 +47,17 @@ export function buildEffectReview(input: { target: string; baseline: EffectSnaps
   let improved = 0
   let declined = 0
   let comparable = 0
+  const anomalies: string[] = []
+  const invalidBefore = invalidMetrics(input.baseline, '基线', anomalies)
+  const invalidAfter = invalidMetrics(input.current, '当前周期', anomalies)
   const changes: EffectReview['changes'] = []
   for (const metric of METRICS) {
-    const before = metricValue(input.baseline, metric.key)
-    const after = metricValue(input.current, metric.key)
+    const before = input.baseline[metric.key]
+    const after = input.current[metric.key]
+    if (invalidBefore.has(metric.key) || invalidAfter.has(metric.key)) {
+      changes.push({ metric: metric.label, direction: 'unknown', interpretation: '汇总数据异常，已排除此项比较。' })
+      continue
+    }
     if (before === undefined || after === undefined) {
       changes.push({
         metric: metric.label,
@@ -75,9 +102,8 @@ export function buildEffectReview(input: { target: string; baseline: EffectSnaps
         : declined > 0
           ? 'declining'
           : 'inconclusive'
-  const dataQuality: EffectReview['dataQuality'] = comparable >= 3 ? 'comparable' : comparable > 0 ? 'partial' : 'insufficient'
+  const dataQuality: EffectReview['dataQuality'] = comparable >= 3 && anomalies.length === 0 ? 'comparable' : comparable > 0 ? 'partial' : 'insufficient'
   const opportunities: EffectReview['opportunities'] = []
-  const anomalies: string[] = []
   const rows = input.rows || []
   for (const row of rows) {
     if (row.impressions !== undefined && row.clicks !== undefined && row.clicks > row.impressions) anomalies.push(`${row.query || row.page || '未命名行'}：clicks 大于 impressions，检查导入口径。`)

@@ -25,6 +25,20 @@ describe('manual effect review', () => {
     expect(review.nextActions.join('\n')).toContain('补充')
   })
 
+  it('excludes inconsistent aggregate metrics on either side of the comparison', () => {
+    const good = { period: 'a', source: 'GSC', impressions: 100, clicks: 10, ctrPercent: 10 }
+    const bad = { ...good, period: 'b', clicks: 120, ctrPercent: 120 }
+    for (const [baseline, current] of [[good, bad], [bad, good]] as const) {
+      const review = buildEffectReview({ target: 'page', baseline, current })
+      expect(review.status).toBe('inconclusive')
+      expect(review.dataQuality).toBe('insufficient')
+      expect(review.anomalies.join(' ')).toContain('clicks 大于 impressions')
+    }
+    const mixed = buildEffectReview({ target: 'page', baseline: good, current: { ...good, ctrPercent: 90 } })
+    expect(mixed.status).toBe('inconclusive')
+    expect(mixed.changes.find(change => change.metric.includes('CTR'))?.direction).toBe('unknown')
+  })
+
   it('routes query-level opportunities and catches malformed metrics', () => {
     const review = buildEffectReview({
       target: 'guide',
